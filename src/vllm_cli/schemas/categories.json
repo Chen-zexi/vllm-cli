@@ -1,0 +1,55 @@
+{
+  "version": "1.0",
+  "description": "Category definitions for organizing vLLM arguments",
+  "categories": {
+    "essential": {
+      "name": "Essential Settings",
+      "description": "Core configuration that most users need",
+      "order": 1,
+      "icon": "",
+      "show_by_default": true
+    },
+    "performance": {
+      "name": "Performance & Memory",
+      "description": "Control resource usage and throughput",
+      "order": 2,
+      "icon": "",
+      "show_by_default": true
+    },
+    "parallelism": {
+      "name": "Parallel Processing",
+      "description": "Distributed and parallel execution settings",
+      "order": 3,
+      "icon": "",
+      "show_by_default": false
+    },
+    "optimization": {
+      "name": "Optimization Features",
+      "description": "Advanced optimization and acceleration settings",
+      "order": 4,
+      "icon": "",
+      "show_by_default": false
+    },
+    "api": {
+      "name": "API Configuration",
+      "description": "API server and authentication settings",
+      "order": 5,
+      "icon": "",
+      "show_by_default": false
+    },
+    "advanced": {
+      "name": "Advanced Settings",
+      "description": "Fine-tuning and experimental features",
+      "order": 6,
+      "icon": "",
+      "show_by_default": false
+    },
+    "monitoring": {
+      "name": "Logging & Monitoring",
+      "description": "Control logging, monitoring, and observability",
+      "order": 7,
+      "icon": "",
+      "show_by_default": false
+    }
+  }
+}

@@ -1,0 +1,445 @@
+{
+  "version": "1.0",
+  "description": "vLLM server argument definitions and metadata",
+  "arguments": {
+    "model": {
+      "type": "string",
+      "category": "essential",
+      "description": "Model name or path to serve",
+      "cli_flag": null,
+      "required": true,
+      "importance": "critical"
+    },
+    "dtype": {
+      "type": "choice",
+      "category": "essential",
+      "description": "Data type for model weights",
+      "default": "auto",
+      "cli_flag": "--dtype",
+      "choices": ["auto", "float16", "bfloat16", "float32", "float8"],
+      "importance": "high",
+      "hint": "Use bfloat16 for better numerical stability, float16 for memory savings"
+    },
+    "port": {
+      "type": "integer",
+      "category": "api",
+      "description": "Port to serve the API on",
+      "default": 8000,
+      "cli_flag": "--port",
+      "validation": {"min": 1000, "max": 65535},
+      "importance": "high"
+    },
+    "host": {
+      "type": "string",
+      "category": "api",
+      "description": "Host address to bind the server",
+      "default": "0.0.0.0",
+      "cli_flag": "--host",
+      "importance": "medium"
+    },
+    "quantization": {
+      "type": "choice",
+      "category": "essential",
+      "description": "Quantization method for model compression",
+      "default": null,
+      "cli_flag": "--quantization",
+      "choices": [
+        null, "awq", "awq_marlin", "auto-round", "bitsandbytes",
+        "bitblas", "gguf", "gptq", "gptq_marlin", "fp8",
+        "fbgemm_fp8", "compressed-tensors", "experts_int8"
+      ],
+      "importance": "high",
+      "hint": "Reduces memory usage but may impact quality"
+    },
+    "max_model_len": {
+      "type": "integer",
+      "category": "performance",
+      "description": "Maximum sequence length (context window)",
+      "default": null,
+      "cli_flag": "--max-model-len",
+      "validation": {"min": 128, "max": 1000000},
+      "importance": "high",
+      "hint": "Lower values use less memory but limit context"
+    },
+    "gpu_memory_utilization": {
+      "type": "float",
+      "category": "performance",
+      "description": "Fraction of GPU memory to use",
+      "default": 0.9,
+      "cli_flag": "--gpu-memory-utilization",
+      "validation": {"min": 0.1, "max": 1.0},
+      "importance": "high",
+      "hint": "Lower values leave room for other processes"
+    },
+    "max_num_seqs": {
+      "type": "integer",
+      "category": "performance",
+      "description": "Maximum number of sequences to process concurrently",
+      "default": null,
+      "cli_flag": "--max-num-seqs",
+      "validation": {"min": 1, "max": 10000},
+      "importance": "high",
+      "hint": "Higher values increase throughput but use more memory"
+    },
+    "max_num_batched_tokens": {
+      "type": "integer",
+      "category": "performance",
+      "description": "Maximum number of tokens in a single batch",
+      "default": null,
+      "cli_flag": "--max-num-batched-tokens",
+      "validation": {"min": 1, "max": 100000},
+      "importance": "medium"
+    },
+    "swap_space": {
+      "type": "integer",
+      "category": "performance",
+      "description": "CPU swap space in GiB for handling overflow",
+      "default": null,
+      "cli_flag": "--swap-space",
+      "validation": {"min": 0, "max": 1000},
+      "importance": "medium",
+      "hint": "Allows handling more requests at the cost of speed"
+    },
+    "cpu_offload_gb": {
+      "type": "float",
+      "category": "performance",
+      "description": "Offload model weights to CPU (in GB)",
+      "default": null,
+      "cli_flag": "--cpu-offload-gb",
+      "validation": {"min": 0, "max": 1000},
+      "importance": "medium",
+      "hint": "Reduces GPU memory usage but slows inference"
+    },
+    "tensor_parallel_size": {
+      "type": "integer",
+      "category": "essential",
+      "description": "Number of GPUs for tensor parallelism",
+      "default": 1,
+      "cli_flag": "--tensor-parallel-size",
+      "validation": {"min": 1, "max": 8},
+      "importance": "high",
+      "hint": "Split model across multiple GPUs for large models"
+    },
+    "pipeline_parallel_size": {
+      "type": "integer",
+      "category": "parallelism",
+      "description": "Number of pipeline parallel stages",
+      "default": 1,
+      "cli_flag": "--pipeline-parallel-size",
+      "validation": {"min": 1, "max": 8},
+      "importance": "medium"
+    },
+    "data_parallel_size": {
+      "type": "integer",
+      "category": "parallelism",
+      "description": "Number of data parallel replicas",
+      "default": null,
+      "cli_flag": "--data-parallel-size",
+      "validation": {"min": 1, "max": 64},
+      "importance": "medium",
+      "hint": "For multi-node deployments"
+    },
+    "enable_expert_parallel": {
+      "type": "boolean",
+      "category": "parallelism",
+      "description": "Enable expert parallelism for MoE models",
+      "default": false,
+      "cli_flag": "--enable-expert-parallel",
+      "importance": "low",
+      "hint": "Only for Mixture of Experts models"
+    },
+    "enable_chunked_prefill": {
+      "type": "boolean",
+      "category": "optimization",
+      "description": "Enable chunked prefill to reduce memory peaks",
+      "default": false,
+      "cli_flag": "--enable-chunked-prefill",
+      "importance": "high",
+      "hint": "Recommended for long contexts"
+    },
+    "enable_prefix_caching": {
+      "type": "boolean",
+      "category": "optimization",
+      "description": "Cache common prompt prefixes",
+      "default": false,
+      "cli_flag": "--enable-prefix-caching",
+      "importance": "high",
+      "hint": "Speeds up requests with shared prefixes"
+    },
+    "kv_cache_dtype": {
+      "type": "choice",
+      "category": "optimization",
+      "description": "Data type for KV cache storage",
+      "default": "auto",
+      "cli_flag": "--kv-cache-dtype",
+      "choices": ["auto", "fp8", "fp8_e4m3", "fp8_e5m2", "fp8_inc"],
+      "importance": "medium",
+      "hint": "FP8 reduces memory with minimal quality impact"
+    },
+    "num_lookahead_slots": {
+      "type": "integer",
+      "category": "optimization",
+      "description": "Lookahead slots for speculative decoding",
+      "default": null,
+      "cli_flag": "--num-lookahead-slots",
+      "validation": {"min": 0, "max": 100},
+      "importance": "low"
+    },
+    "block_size": {
+      "type": "choice",
+      "category": "optimization",
+      "description": "Token block size for paged attention",
+      "default": null,
+      "cli_flag": "--block-size",
+      "choices": [8, 16, 32, 64, 128],
+      "importance": "low"
+    },
+    "enable_lora": {
+      "type": "boolean",
+      "category": "optimization",
+      "description": "Enable LoRA adapter support",
+      "default": false,
+      "cli_flag": "--enable-lora",
+      "importance": "medium"
+    },
+    "max_loras": {
+      "type": "integer",
+      "category": "optimization",
+      "description": "Maximum number of LoRA adapters",
+      "default": null,
+      "cli_flag": "--max-loras",
+      "validation": {"min": 1, "max": 100},
+      "importance": "low",
+      "depends_on": "enable_lora"
+    },
+    "api_key": {
+      "type": "string",
+      "category": "api",
+      "description": "API key for authentication",
+      "default": null,
+      "cli_flag": "--api-key",
+      "importance": "high",
+      "sensitive": true
+    },
+    "served_model_name": {
+      "type": "string",
+      "category": "api",
+      "description": "Model name to report in API responses",
+      "default": null,
+      "cli_flag": "--served-model-name",
+      "importance": "medium"
+    },
+    "chat_template": {
+      "type": "string",
+      "category": "api",
+      "description": "Path to custom chat template",
+      "default": null,
+      "cli_flag": "--chat-template",
+      "importance": "low"
+    },
+    "response_role": {
+      "type": "string",
+      "category": "api",
+      "description": "Role name for model responses",
+      "default": "assistant",
+      "cli_flag": "--response-role",
+      "importance": "low"
+    },
+    "ssl_keyfile": {
+      "type": "string",
+      "category": "api",
+      "description": "Path to SSL key file",
+      "default": null,
+      "cli_flag": "--ssl-keyfile",
+      "importance": "low"
+    },
+    "ssl_certfile": {
+      "type": "string",
+      "category": "api",
+      "description": "Path to SSL certificate file",
+      "default": null,
+      "cli_flag": "--ssl-certfile",
+      "importance": "low"
+    },
+    "seed": {
+      "type": "integer",
+      "category": "advanced",
+      "description": "Random seed for reproducibility",
+      "default": null,
+      "cli_flag": "--seed",
+      "validation": {"min": 0, "max": 2147483647},
+      "importance": "low"
+    },
+    "tokenizer": {
+      "type": "string",
+      "category": "advanced",
+      "description": "Custom tokenizer name or path",
+      "default": null,
+      "cli_flag": "--tokenizer",
+      "importance": "low"
+    },
+    "tokenizer_mode": {
+      "type": "choice",
+      "category": "advanced",
+      "description": "Tokenizer mode",
+      "default": "auto",
+      "cli_flag": "--tokenizer-mode",
+      "choices": ["auto", "custom", "mistral", "slow"],
+      "importance": "low"
+    },
+    "trust_remote_code": {
+      "type": "boolean",
+      "category": "advanced",
+      "description": "Trust and execute remote code from model repo",
+      "default": false,
+      "cli_flag": "--trust-remote-code",
+      "importance": "high",
+      "hint": "Required for some models but has security implications"
+    },
+    "rope_scaling": {
+      "type": "string",
+      "category": "advanced",
+      "description": "RoPE scaling configuration (JSON)",
+      "default": null,
+      "cli_flag": "--rope-scaling",
+      "importance": "low"
+    },
+    "rope_theta": {
+      "type": "float",
+      "category": "advanced",
+      "description": "RoPE theta value",
+      "default": null,
+      "cli_flag": "--rope-theta",
+      "importance": "low"
+    },
+    "max_logprobs": {
+      "type": "integer",
+      "category": "advanced",
+      "description": "Maximum logprobs to return",
+      "default": null,
+      "cli_flag": "--max-logprobs",
+      "validation": {"min": 0, "max": 100},
+      "importance": "low"
+    },
+    "disable_sliding_window": {
+      "type": "boolean",
+      "category": "advanced",
+      "description": "Disable sliding window attention",
+      "default": false,
+      "cli_flag": "--disable-sliding-window",
+      "importance": "low"
+    },
+    "revision": {
+      "type": "string",
+      "category": "advanced",
+      "description": "Model revision (branch/tag/commit)",
+      "default": null,
+      "cli_flag": "--revision",
+      "importance": "low"
+    },
+    "enforce_eager": {
+      "type": "boolean",
+      "category": "advanced",
+      "description": "Force eager execution (disable CUDA graphs)",
+      "default": false,
+      "cli_flag": "--enforce-eager",
+      "importance": "low",
+      "hint": "May help with debugging or compatibility"
+    },
+    "disable_log_stats": {
+      "type": "boolean",
+      "category": "monitoring",
+      "description": "Disable periodic stats logging",
+      "default": false,
+      "cli_flag": "--disable-log-stats",
+      "importance": "medium"
+    },
+    "enable_log_requests": {
+      "type": "boolean",
+      "category": "monitoring",
+      "description": "Log all API requests",
+      "default": false,
+      "cli_flag": "--enable-log-requests",
+      "importance": "medium"
+    },
+    "max_log_len": {
+      "type": "integer",
+      "category": "monitoring",
+      "description": "Maximum length of logged prompts",
+      "default": null,
+      "cli_flag": "--max-log-len",
+      "validation": {"min": 0, "max": 100000},
+      "importance": "low"
+    },
+    "otlp_traces_endpoint": {
+      "type": "string",
+      "category": "monitoring",
+      "description": "OpenTelemetry traces endpoint",
+      "default": null,
+      "cli_flag": "--otlp-traces-endpoint",
+      "importance": "low"
+    },
+    "enable_prompt_tokens_details": {
+      "type": "boolean",
+      "category": "monitoring",
+      "description": "Include token details in API responses",
+      "default": false,
+      "cli_flag": "--enable-prompt-tokens-details",
+      "importance": "low"
+    },
+    "guided_decoding_backend": {
+      "type": "choice",
+      "category": "advanced",
+      "description": "Backend for guided/constrained generation",
+      "default": "auto",
+      "cli_flag": "--guided-decoding-backend",
+      "choices": ["auto", "guidance", "outlines", "xgrammar"],
+      "importance": "low"
+    },
+    "speculative_model": {
+      "type": "string",
+      "category": "optimization",
+      "description": "Draft model for speculative decoding",
+      "default": null,
+      "cli_flag": "--speculative-model",
+      "importance": "low",
+      "hint": "Can speed up generation with a smaller draft model"
+    },
+    "num_speculative_tokens": {
+      "type": "integer",
+      "category": "optimization",
+      "description": "Tokens to generate speculatively",
+      "default": null,
+      "cli_flag": "--num-speculative-tokens",
+      "validation": {"min": 1, "max": 100},
+      "importance": "low",
+      "depends_on": "speculative_model"
+    },
+    "reasoning_parser": {
+      "type": "choice",
+      "category": "advanced",
+      "description": "Parser for reasoning models",
+      "default": null,
+      "cli_flag": "--reasoning-parser",
+      "choices": ["deepseek_r1", "glm45", "GptOss", "granite", "hunyuan_a13b", "mistral", "qwen3", "step3"],
+      "importance": "low"
+    },
+    "distributed_executor_backend": {
+      "type": "choice",
+      "category": "parallelism",
+      "description": "Backend for distributed execution",
+      "default": null,
+      "cli_flag": "--distributed-executor-backend",
+      "choices": ["external_launcher", "mp", "ray", "uni", null],
+      "importance": "low"
+    },
+    "disable_custom_all_reduce": {
+      "type": "boolean",
+      "category": "parallelism",
+      "description": "Disable custom all-reduce kernel",
+      "default": false,
+      "cli_flag": "--disable-custom-all-reduce",
+      "importance": "low"
+    }
+  }
+}

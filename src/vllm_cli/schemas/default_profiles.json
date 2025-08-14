@@ -1,0 +1,45 @@
+{
+  "version": "1.0",
+  "description": "Default configuration profiles for vLLM CLI",
+  "profiles": {
+    "standard": {
+      "name": "Standard",
+      "description": "Minimal configuration with auto-detected settings",
+      "icon": "",
+      "config": {}
+    },
+    "moe_optimized": {
+      "name": "MoE Optimized",
+      "description": "Optimized for Mixture of Experts (MoE) models",
+      "icon": "",
+      "config": {
+        "enable_expert_parallel": true
+      }
+    },
+    "high_throughput": {
+      "name": "High Throughput",
+      "description": "Optimized for maximum request throughput",
+      "icon": "",
+      "config": {
+        "max_model_len": 8192,
+        "gpu_memory_utilization": 0.95,
+        "enable_chunked_prefill": true,
+        "max_num_batched_tokens": 8192,
+        "trust_remote_code": true,
+        "enable_prefix_caching": true
+      }
+    },
+    "low_memory": {
+      "name": "Low Memory",
+      "description": "Minimizes memory usage for constrained environments",
+      "icon": "",
+      "config": {
+        "max_model_len": 4096,
+        "gpu_memory_utilization": 0.70,
+        "enable_chunked_prefill": false,
+        "trust_remote_code": true,
+        "quantization": "bitsandbytes"
+      }
+    }
+  }
+}

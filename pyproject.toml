@@ -1,0 +1,84 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vllm-cli"
+version = "0.1.0"
+authors = [
+    { name="Zexi Chen", email="zzxxi.chen@gmail.com" },
+]
+description = "A CLI tool to conveniently serve LLMs with vLLM"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: POSIX :: Linux",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: System :: Distributed Computing",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "rich>=13.0",
+    "inquirer>=3.0",
+    "click>=8.0",
+    "psutil>=5.9",
+    "pydantic>=2.0",
+    "pyyaml>=6.0",
+    "hf-model-tool>=0.2.2",
+    "importlib-metadata>=4.0; python_version<'3.8'",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+]
+dev = [
+    "pytest>=7.0.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+]
+
+[project.scripts]
+vllm-cli = "vllm_cli.__main__:main"
+
+[project.urls]
+"Homepage" = "https://github.com/Chen-zexi/vllm-cli"
+"Bug Tracker" = "https://github.com/Chen-zexi/vllm-cli/issues"
+
+[tool.setuptools]
+packages = ["vllm_cli"]
+package-dir = {"vllm_cli" = "src/vllm_cli"}
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "--verbose",
+    "--tb=short",
+    "--strict-markers",
+]
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
