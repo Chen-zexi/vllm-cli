@@ -1,5 +1,9 @@
 # vLLM CLI
 
+[![PyPI version](https://badge.fury.io/py/vllm-cli.svg)](https://badge.fury.io/py/vllm-cli)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+
 A command-line interface tool for serving Large Language Models using vLLM. Provides both interactive and command-line modes with features for configuration profiles, model management, and server monitoring.
 
 ![vLLM CLI Welcome Screen](asset/welcome-screen.png)
@@ -146,18 +150,6 @@ Four carefully selected profiles cover the most common use cases. Since vLLM onl
 }
 ```
 *Reduces memory usage through quantization and conservative settings*
-
-### Dynamic Configuration Features
-
-- **Automatic Hardware Detection**: Profiles automatically detect and optimize for available hardware (GPU count, memory, capabilities)
-- **Optimal Data Type Selection**: vLLM automatically chooses the best dtype (bfloat16, float16, float32) based on hardware support and model requirements
-- **Intelligent Multi-GPU Support**: Since vLLM defaults to single GPU usage, our system automatically detects multiple GPUs and sets `tensor_parallel_size` to utilize all available hardware
-- **Model-Native Context**: Profiles without explicit `max_model_len` use the model's native maximum context length
-- **Quantization Compatibility**: All quantization methods (including BitsAndBytes) work seamlessly with tensor parallelism
-
-### Custom Profiles
-
-Create custom profiles through the interactive interface or by editing the user profiles file directly.
 
 ### Error Handling and Log Viewing
 ![Error Handling](asset/error-handling-logs.png)
