@@ -100,7 +100,7 @@ def format_gpu_memory_stats(
     if compact:
         return f"{mem_percent:.0f}%", mem_percent
     else:
-        return f"{format_size(mem_used)}/{format_size(mem_total)}", mem_percent
+        return f"{format_size(mem_used):>10}/{format_size(mem_total)}", mem_percent
 
 
 def format_gpu_temperature(temperature: float) -> str:
@@ -154,6 +154,7 @@ def create_gpu_table(gpu_info: List[Dict[str, Any]], config: Dict[str, Any]) -> 
     # Determine display settings based on terminal width
     compact_mode = config["compact_mode"] or console.width < 100
     bar_width = 6 if compact_mode else 10
+    padding_spaces = 3 if compact_mode else 6  # More padding for wider terminals
 
     for gpu in gpu_info:
         gpu_name = format_gpu_name(gpu["name"], config["max_name_length"])
@@ -169,7 +170,7 @@ def create_gpu_table(gpu_info: List[Dict[str, Any]], config: Dict[str, Any]) -> 
 
         # Format utilization
         util_percent = gpu["utilization"]
-        util_text = f"{util_percent:.0f}%" if compact_mode else f"{util_percent:.1f}%"
+        util_text = f"{util_percent:3.0f}%" if compact_mode else f"{util_percent:5.1f}%"
         util_bar = get_progress_bar(
             util_percent,
             style=config["progress_style"],
@@ -185,7 +186,7 @@ def create_gpu_table(gpu_info: List[Dict[str, Any]], config: Dict[str, Any]) -> 
             temp_text = format_gpu_temperature(gpu["temperature"])
             stats_parts.append(f"Temp: {temp_text}")
 
-        stats_display = "   ".join(stats_parts)
+        stats_display = (" " * padding_spaces).join(stats_parts)
 
         gpu_table.add_row(f"[bold]{gpu['index']:^3}[/bold]", gpu_name, stats_display)
 

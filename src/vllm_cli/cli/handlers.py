@@ -83,7 +83,15 @@ def handle_serve(args: argparse.Namespace) -> bool:
         # Create and start server
         server = VLLMServer(config)
 
-        console.print(f"[blue]Starting vLLM server for model: {args.model}[/blue]")
+        # Check if this is a remote model
+        is_remote_model = "/" in args.model and not args.model.startswith("/")
+        
+        if is_remote_model:
+            console.print(f"[blue]Starting vLLM server for remote model: {args.model}[/blue]")
+            console.print("[yellow]Note: Model will be downloaded from HuggingFace Hub if not cached[/yellow]")
+        else:
+            console.print(f"[blue]Starting vLLM server for model: {args.model}[/blue]")
+        
         console.print(f"Port: {config.get('port', 8000)}")
         console.print(f"Host: {config.get('host', 'localhost')}")
 

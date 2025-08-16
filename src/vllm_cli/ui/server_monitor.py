@@ -23,6 +23,7 @@ from ..system import get_gpu_info, format_size
 from ..config import ConfigManager
 from .common import console, create_panel
 from .components import create_gpu_status_panel, calculate_gpu_panel_size
+from .log_viewer import show_log_menu
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +85,7 @@ def monitor_server(server: VLLMServer) -> str:
         layout["footer"].update(
             Align.center(
                 Text(
-                    "Press Ctrl+C to stop monitoring • Server will continue running in background",
+                    "Press Ctrl+C to stop monitoring • Server continues in background",
                     style="dim cyan",
                 )
             )
@@ -180,6 +181,7 @@ def monitor_server(server: VLLMServer) -> str:
     # Show options with navigation
     options = [
         "Resume monitoring",
+        "View server logs",
         "Stop server", 
         "Return to main menu"
     ]
@@ -193,6 +195,9 @@ def monitor_server(server: VLLMServer) -> str:
 
     if choice == "Resume monitoring":
         return monitor_server(server)
+    elif choice == "View server logs":
+        show_log_menu(server)
+        return monitor_server(server)  # Return to monitoring after viewing logs
     elif choice == "Stop server":
         console.print("[yellow]Stopping server...[/yellow]")
         server.stop()
@@ -254,6 +259,7 @@ def monitor_active_servers() -> str:
 
     # Select server to monitor or manage
     choices = [f"Monitor Server {i}" for i in range(1, len(servers) + 1)]
+    choices.extend([f"View Logs {i}" for i in range(1, len(servers) + 1)])
     choices.append("Stop All Servers")
 
     action = unified_prompt(
@@ -272,5 +278,9 @@ def monitor_active_servers() -> str:
     elif action.startswith("Monitor Server"):
         server_idx = int(action.split()[-1]) - 1
         return monitor_server(servers[server_idx])
+    elif action.startswith("View Logs"):
+        server_idx = int(action.split()[-1]) - 1
+        show_log_menu(servers[server_idx])
+        return "continue"
 
     return "continue"

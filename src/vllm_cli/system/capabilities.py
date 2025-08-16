@@ -118,15 +118,20 @@ def get_performance_recommendations() -> List[Dict[str, Any]]:
     # Attention backend recommendations
     flash_attn_info = attention_caps.get("flash_attn", {})
     if not flash_attn_info.get("supported", False):
-        recommendations.append(
-            {
-                "priority": "high",
-                "category": "attention",
-                "title": "Install Flash Attention 2",
-                "description": "Flash Attention provides significant memory and speed improvements",
-                "action": "pip install flash-attn",
-            }
+        # Check if GPU architecture supports Flash Attention
+        has_compatible_gpu = any(
+            gpu.get("compute_capability_float", 0) >= 7.5 for gpu in gpu_caps
         )
+        if has_compatible_gpu:
+            recommendations.append(
+                {
+                    "priority": "high",
+                    "category": "attention",
+                    "title": "Install Flash Attention 2",
+                    "description": "Flash Attention provides significant memory and speed improvements",
+                    "action": "pip install flash-attn (requires sm_75+)",
+                }
+            )
     else:
         # Check if user has Flash Attention 3 on Hopper/Blackwell GPUs
         version_info = flash_attn_info.get("version_info", {})
@@ -137,13 +142,25 @@ def get_performance_recommendations() -> List[Dict[str, Any]]:
         )
 
         if generation == "2" and has_hopper_blackwell:
+            # Determine the specific architecture and SM version
+            arch = gpu_caps[0].get("architecture", "GPU")
+            sm_version = gpu_caps[0].get("sm_version", "")
+            
+            if arch == "Hopper":
+                arch_desc = f"{arch} architecture (sm_90)"
+            elif arch == "Blackwell":
+                # Blackwell can be sm_100 or sm_120
+                arch_desc = f"{arch} architecture (sm_100/sm_120)"
+            else:
+                arch_desc = f"{arch} architecture"
+            
             recommendations.append(
                 {
                     "priority": "medium",
                     "category": "attention",
                     "title": "Consider upgrading to Flash Attention 3",
-                    "description": f'Your {gpu_caps[0].get("architecture", "GPU")} architecture can benefit from Flash Attention 3',
-                    "action": "pip install flash-attn>=3.0 (experimental)",
+                    "description": f'Your {arch_desc} may support Flash Attention 3',
+                    "action": "See https://github.com/Dao-AILab/flash-attention for installation details",
                 }
             )
 
@@ -221,30 +238,44 @@ def _determine_gpu_architecture(capability: Tuple[int, int]) -> Dict[str, Any]:
     arch_info = {}
 
     # Architecture mapping
-    if major >= 12:
+    if major == 12:
+        # Blackwell B100/B200 series (sm_120)
         arch_info["architecture"] = "Blackwell"
         arch_info["generation"] = "Latest"
-    elif major >= 9:
+        arch_info["sm_version"] = f"sm_{major}{minor}"
+    elif major == 10:
+        # Blackwell consumer/lower-tier (sm_100)
+        arch_info["architecture"] = "Blackwell"
+        arch_info["generation"] = "Latest"
+        arch_info["sm_version"] = f"sm_{major}{minor}"
+    elif major == 9:
         arch_info["architecture"] = "Hopper"
         arch_info["generation"] = "Latest"
+        arch_info["sm_version"] = f"sm_{major}{minor}"
     elif major == 8 and minor >= 9:
         arch_info["architecture"] = "Ada Lovelace"
         arch_info["generation"] = "Current"
+        arch_info["sm_version"] = f"sm_{major}{minor}"
     elif major == 8 and minor >= 6:
         arch_info["architecture"] = "Ampere"
         arch_info["generation"] = "Current"
+        arch_info["sm_version"] = f"sm_{major}{minor}"
     elif major == 8 and minor < 6:
         arch_info["architecture"] = "Ampere"
         arch_info["generation"] = "Current"
+        arch_info["sm_version"] = f"sm_{major}{minor}"
     elif major == 7 and minor >= 5:
         arch_info["architecture"] = "Turing"
         arch_info["generation"] = "Previous"
+        arch_info["sm_version"] = f"sm_{major}{minor}"
     elif major == 7 and minor < 5:
         arch_info["architecture"] = "Volta"
         arch_info["generation"] = "Previous"
+        arch_info["sm_version"] = f"sm_{major}{minor}"
     else:
         arch_info["architecture"] = "Legacy"
         arch_info["generation"] = "Legacy"
+        arch_info["sm_version"] = f"sm_{major}{minor}"
 
     # Feature support based on compute capability
     arch_info["tensor_cores"] = major >= 7

@@ -19,6 +19,7 @@ import inquirer
 from ..config import ConfigManager
 from ..server import VLLMServer
 from .navigation import unified_prompt
+from .log_viewer import show_log_menu
 from ..system import get_gpu_info
 from .common import console, create_panel
 from .display import display_config, select_profile
@@ -212,7 +213,16 @@ def start_server_with_config(config: Dict[str, Any]) -> str:
 
         console.print()  # Add spacing
 
-    console.print("\n[bold cyan]Starting vLLM server...[/bold cyan]")
+    # Check if this is a remote model
+    model_name = config.get("model", "")
+    is_remote_model = "/" in model_name and not model_name.startswith("/")
+    
+    if is_remote_model:
+        console.print(f"\n[bold cyan]Starting vLLM server with remote model:[/bold cyan] {model_name}")
+        console.print("[yellow]Note: First-time use will download the model from HuggingFace Hub.[/yellow]")
+        console.print("[dim]Download may take 10-30 minutes depending on size and connection speed.[/dim]\n")
+    else:
+        console.print("\n[bold cyan]Starting vLLM server...[/bold cyan]")
 
     # Get UI preferences for configurable log lines and refresh rate
     ui_prefs = config_manager.get_ui_preferences()
@@ -379,9 +389,18 @@ def start_server_with_config(config: Dict[str, Any]) -> str:
                                 status_msg = f"{spinner} Compiling CUDA kernels and graphs... ({elapsed}s)"
                                 stage_detected = True
                                 break
-                            elif "downloading" in log_lower:
+                            elif "downloading" in log_lower or "fetching" in log_lower:
+                                # Try to extract download progress if available
+                                progress_info = ""
+                                if "%" in log:
+                                    # Try to extract percentage
+                                    import re
+                                    match = re.search(r'(\d+(?:\.\d+)?)\s*%', log)
+                                    if match:
+                                        progress_info = f" - {match.group(1)}%"
+                                
                                 status_msg = (
-                                    f"{spinner} Downloading model files... ({elapsed}s)"
+                                    f"{spinner} Downloading model from HuggingFace Hub{progress_info}... ({elapsed}s)"
                                 )
                                 stage_detected = True
                                 break
@@ -494,9 +513,14 @@ def start_server_with_config(config: Dict[str, Any]) -> str:
                 console.print("\n[bold]Last logs:[/bold]")
                 for log in startup_logs[-5:]:
                     console.print(f"  {log}")
-            console.print(
-                f"\n[yellow]Check the full log at: {server.log_path}[/yellow]"
-            )
+            # Offer to view logs interactively
+            console.print("\n[yellow]Server startup failed. Last logs shown above.[/yellow]")
+            
+            view_logs = input("\nWould you like to view the full logs? (y/N): ").strip().lower()
+            if view_logs in ['y', 'yes']:
+                show_log_menu(server)
+            else:
+                console.print(f"\n[dim]Full log file: {server.log_path}[/dim]")
 
     except Exception as e:
         logger.error(f"Error starting server: {e}")

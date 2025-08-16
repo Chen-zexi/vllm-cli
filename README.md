@@ -2,14 +2,23 @@
 
 A command-line interface tool for serving Large Language Models using vLLM. Provides both interactive and command-line modes with features for configuration profiles, model management, and server monitoring.
 
+![vLLM CLI Welcome Screen](asset/welcome-screen.png)
+*Welcome screen showing GPU status and system overview*
+
 ## Features
 
 - **Interactive Mode**: Rich terminal interface with menu-driven navigation
 - **Command-Line Mode**: Direct CLI commands for automation and scripting
 - **Model Management**: Automatic discovery and management of local models
+- **Remote Model Support**: Serve models directly from HuggingFace Hub without pre-downloading
 - **Configuration Profiles**: Pre-configured and custom server profiles
 - **Server Monitoring**: Real-time monitoring of active vLLM servers
 - **System Information**: GPU, memory, and CUDA compatibility checking
+- **Log Viewer**: View the complete log file when server startup fails
+
+### Server Monitoring
+![Server Monitoring](asset/server-monitoring.png)
+*Real-time server monitoring showing GPU utilization, server status, and streaming logs*
 
 ## Installation
 
@@ -53,6 +62,18 @@ vllm-cli
 ```
 
 Launch the interactive terminal interface with menu-driven navigation for model serving, configuration, and monitoring.
+
+#### Model Selection with Remote Support
+![Model Selection](asset/model-selection-remote.png)
+*Model selection interface showing both local models and HuggingFace Hub auto-download option*
+
+#### Quick Serve with Last Configuration
+![Quick Serve](asset/quick-serve-config.png)
+*Quick serve feature automatically uses the last successful configuration*
+
+#### Custom Configuration Example
+![Custom Configuration](asset/custom-configuration.png)
+*Advanced configuration interface with categorized vLLM options and custom arguments*
 
 ### Command-Line Mode
 
@@ -138,6 +159,15 @@ Four carefully selected profiles cover the most common use cases. Since vLLM onl
 
 Create custom profiles through the interactive interface or by editing the user profiles file directly.
 
+### Error Handling and Log Viewing
+![Error Handling](asset/error-handling-logs.png)
+*Interactive error recovery with log viewing options when server startup fails*
+
+## System Information
+
+![System Information](asset/system-information.png)
+*Comprehensive system information display showing GPU capabilities, memory, dependencies version, attention backends, and quantization support*
+
 ## Architecture
 
 ### Core Components
@@ -176,22 +206,6 @@ src/vllm_cli/
 └── schemas/       # JSON schemas
 ```
 
-### Testing
-
-```bash
-# Run tests (if implemented)
-pytest tests/
-
-# Format code
-black src/vllm_cli --line-length 88
-
-# Lint code
-flake8 src/vllm_cli
-
-# Type checking
-mypy src/vllm_cli --python-version 3.8
-```
-
 ## Environment Variables
 
 - `VLLM_CLI_ASCII_BOXES`: Use ASCII box drawing characters for compatibility
@@ -202,12 +216,15 @@ mypy src/vllm_cli --python-version 3.8
 ### System Requirements
 
 - Linux
-- NVIDIA GPU with CUDA support
+- NVIDIA GPU with CUDA support (Only NVIDIA GPUs are supported right now, PRs are welcome)
 
 ### Python Dependencies
 
-- vLLM
+- vLLM 
 - PyTorch with CUDA support
+
+Note: Following dependencies are downloaded along with vLLM CLI:
+- hf-model-tool (model discovery)
 - Rich (terminal UI)
 - Inquirer (interactive prompts)
 - psutil (system monitoring)

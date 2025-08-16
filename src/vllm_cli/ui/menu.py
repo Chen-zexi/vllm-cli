@@ -26,6 +26,7 @@ def show_main_menu() -> str:
     from .model_manager import handle_model_management
     from .system_info import show_system_info
     from .settings import handle_settings
+    from .log_viewer import select_server_for_logs, show_log_menu
 
     # Check for active servers
     active_servers = get_active_servers()
@@ -33,6 +34,7 @@ def show_main_menu() -> str:
     menu_options = []
     if active_servers:
         menu_options.append(f"Monitor Active Servers ({len(active_servers)})")
+        menu_options.append(f"View Server Logs ({len(active_servers)})")
 
     menu_options.extend(
         [
@@ -66,5 +68,10 @@ def show_main_menu() -> str:
         return handle_settings()
     elif "Monitor Active Servers" in action:
         return monitor_active_servers()
+    elif "View Server Logs" in action:
+        server = select_server_for_logs()
+        if server:
+            show_log_menu(server)
+        return "continue"
 
     return "continue"

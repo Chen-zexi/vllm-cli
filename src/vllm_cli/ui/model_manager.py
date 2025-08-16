@@ -17,18 +17,98 @@ from .common import console, create_panel
 logger = logging.getLogger(__name__)
 
 
+def enter_remote_model() -> Optional[str]:
+    """
+    Allow user to enter a HuggingFace model ID for remote serving.
+    
+    Returns:
+        Model ID string or None if cancelled
+    """
+    console.print("\n[bold cyan]Remote Model Selection[/bold cyan]")
+    console.print("\nEnter a HuggingFace model ID to serve directly from the Hub.")
+    console.print("The model will be automatically downloaded on first use.\n")
+    
+    console.print("[dim]Examples:[/dim]")
+    console.print("  • openai/gpt-oss-120b\n")
+    
+    console.print("[yellow]Note:[/yellow] First-time download may take 10-30 minutes depending on model size.\n")
+    
+    while True:
+        console.print("[cyan]Model ID (or 'back' to cancel):[/cyan] ", end="")
+        model_id = input().strip()
+        
+        if model_id.lower() in ['back', 'cancel', '']:
+            return None
+        
+        # Validate model ID format
+        if '/' not in model_id:
+            console.print("[red]Invalid format. Model ID should be 'organization/model-name'[/red]")
+            continue
+            
+        parts = model_id.split('/')
+        if len(parts) != 2:
+            console.print("[red]Invalid format. Model ID should be 'organization/model-name'[/red]")
+            continue
+            
+        org, model_name = parts
+        if not org or not model_name:
+            console.print("[red]Invalid model ID. Both organization and model name are required.[/red]")
+            continue
+        
+        # Confirm the selection
+        console.print(f"\n[bold]Selected model:[/bold] {model_id}")
+        console.print("\n[yellow]Warning:[/yellow] This model will be downloaded from HuggingFace Hub.")
+        console.print("Download size can range from a few GB to 100+ GB depending on the model.\n")
+        
+        console.print("[cyan]Proceed with this model? (Y/n):[/cyan] ", end="")
+        confirm = input().strip().lower()
+        
+        if confirm in ['', 'y', 'yes']:
+            logger.info(f"User selected remote model: {model_id}")
+            return model_id
+        elif confirm in ['n', 'no']:
+            console.print("[yellow]Model selection cancelled.[/yellow]")
+            continue
+        else:
+            console.print("[red]Invalid response. Please enter 'y' or 'n'.[/red]")
+            continue
+
+
 def select_model() -> Optional[str]:
     """
     Select a model from available models with provider categorization.
     """
-    console.print("\n[bold cyan]Fetching available models...[/bold cyan]")
+    console.print("\n[bold cyan]Model Selection[/bold cyan]")
 
     try:
+        # First, ask if user wants to use local or remote model
+        model_source_choices = [
+            "Select from local models",
+            "Use a model from HuggingFace Hub (auto-download)"
+        ]
+        
+        source_choice = unified_prompt(
+            "model_source",
+            "How would you like to select a model?",
+            model_source_choices,
+            allow_back=True
+        )
+        
+        if not source_choice or source_choice == "BACK":
+            return None
+            
+        if source_choice == "Use a model from HuggingFace Hub (auto-download)":
+            return enter_remote_model()
+        
+        # Continue with local model selection
+        console.print("\n[bold cyan]Fetching available models...[/bold cyan]")
         models = list_available_models()
 
         if not models:
-            console.print("[yellow]No models found.[/yellow]")
-            console.print("Please download models using HuggingFace tools first.")
+            console.print("[yellow]No local models found.[/yellow]")
+            console.print("\nYou can either:")
+            console.print("  1. Download models using HuggingFace tools")
+            console.print("  2. Go back and select 'Use a model from HuggingFace Hub'")
             input("\nPress Enter to continue...")
             return None
 
