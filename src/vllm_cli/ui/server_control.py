@@ -378,15 +378,14 @@ def start_server_with_config(config: Dict[str, Any]) -> str:
                 layout, console=console, refresh_per_second=startup_refresh_rate
             ):  # User-configurable refresh rate
                 start_time = time.time()
-                timeout = 300  # 5 minutes timeout
 
                 while not startup_complete and not startup_failed:
-                    # Check timeout
-                    if time.time() - start_time > timeout:
+                    # Check if server is still running first
+                    if not server.is_running():
                         startup_failed = True
                         layout["status"].update(
                             create_panel(
-                                "[red]✗ Server startup timeout (5 minutes)[/red]",
+                                "[red]✗ Server process terminated unexpectedly[/red]",
                                 title="Status",
                                 border_style="red",
                             )
@@ -532,18 +531,6 @@ def start_server_with_config(config: Dict[str, Any]) -> str:
 
                         log_text = Text(msg, style="dim yellow")
                         layout["logs"].update(Padding(log_text, (0, 2)))
-
-                    # Check if server is still running
-                    if not server.is_running():
-                        startup_failed = True
-                        layout["status"].update(
-                            create_panel(
-                                "[red]✗ Server process terminated unexpectedly[/red]",
-                                title="Status",
-                                border_style="red",
-                            )
-                        )
-                        break
 
                     time.sleep(0.25)  # Reduced sleep for faster updates
         except KeyboardInterrupt:
