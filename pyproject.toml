@@ -10,9 +10,11 @@ authors = [
 ]
 description = "A CLI tool to conveniently serve LLMs with vLLM"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.9"
 license = {text = "MIT"}
 classifiers = [
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Operating System :: POSIX :: Linux",
@@ -31,7 +33,6 @@ dependencies = [
     "pydantic>=2.0",
     "pyyaml>=6.0",
     "hf-model-tool>=0.2.3",
-    "importlib-metadata>=4.0; python_version<'3.8'",
 ]
 
 [project.optional-dependencies]
@@ -60,7 +61,7 @@ package-dir = {"vllm_cli" = "src/vllm_cli"}
 
 [tool.black]
 line-length = 88
-target-version = ['py38']
+target-version = ['py39', 'py310', 'py311', 'py312']
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -74,7 +75,7 @@ addopts = [
 ]
 
 [tool.mypy]
-python_version = "3.8"
+python_version = "3.9"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
