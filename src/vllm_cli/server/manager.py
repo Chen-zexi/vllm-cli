@@ -105,6 +105,14 @@ class VLLMServer:
             env = os.environ.copy()
             env["PYTHONUNBUFFERED"] = "1"
 
+            # Add HuggingFace token if configured
+            config_manager = ConfigManager()
+            hf_token = config_manager.config.get("hf_token")
+            if hf_token:
+                env["HF_TOKEN"] = hf_token
+                env["HUGGING_FACE_HUB_TOKEN"] = hf_token  # Some tools use this variant
+                logger.info("HuggingFace token configured for server")
+
             # Start the process with proper pipe configuration
             # Use start_new_session=True to create a new process group
             # This prevents the child process from receiving Ctrl+C signals

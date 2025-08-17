@@ -26,6 +26,7 @@ def handle_settings() -> str:
             "Manage Profiles",
             "Model Directories",
             "Server Defaults",
+            "HuggingFace Token",
             "UI Preferences",
             "Clear Cache",
         ]
@@ -42,6 +43,8 @@ def handle_settings() -> str:
             manage_model_directories()
         elif action == "Server Defaults":
             configure_server_defaults()
+        elif action == "HuggingFace Token":
+            configure_hf_token()
         elif action == "UI Preferences":
             configure_ui_preferences()
         elif action == "Clear Cache":
@@ -63,6 +66,175 @@ def manage_model_directories() -> str:
     from .model_directories import manage_model_directories as manage_dirs
 
     return manage_dirs()
+
+
+def configure_hf_token() -> str:
+    """
+    Configure HuggingFace authentication token for accessing gated/private models.
+    """
+    import getpass
+
+    config_manager = ConfigManager()
+
+    console.print("\n[bold cyan]HuggingFace Token Configuration[/bold cyan]")
+    console.print(
+        "\nConfigure your HuggingFace token for accessing gated or private models."
+    )
+    console.print(
+        "[dim]Your token will be stored securely in your user config.[/dim]\n"
+    )
+
+    # Check if token already exists
+    current_token = config_manager.config.get("hf_token", "")
+    if current_token:
+        console.print("[green]✓[/green] HuggingFace token is currently configured")
+        console.print(
+            f"[dim]Token: {current_token[:8]}...{current_token[-4:] if len(current_token) > 12 else ''}[/dim]\n"
+        )
+    else:
+        console.print("[yellow]⚠[/yellow] No HuggingFace token configured\n")
+
+    # Options
+    options = [
+        "Set/Update Token",
+        "Remove Token",
+        "Test Token",
+        "View Token Info",
+    ]
+
+    action = unified_prompt(
+        "hf_token_action", "Select Action", options, allow_back=True
+    )
+
+    if not action or action == "BACK":
+        return "continue"
+
+    if action == "Set/Update Token":
+        console.print("\n[cyan]Enter your HuggingFace token:[/cyan]")
+        console.print(
+            "[dim]Get your token from: https://huggingface.co/settings/tokens[/dim]"
+        )
+        console.print("[dim]The token will be hidden as you type.[/dim]\n")
+
+        # Use getpass for secure input
+        token = getpass.getpass("Token: ").strip()
+
+        if token:
+            # Validate token with HuggingFace API
+            console.print("\n[cyan]Validating token...[/cyan]")
+
+            from ..validation.token import validate_hf_token
+
+            is_valid, user_info = validate_hf_token(token)
+
+            if is_valid:
+                # Save token to config
+                config_manager.config["hf_token"] = token
+                config_manager._save_config()
+
+                console.print("[green]✓ Token validated and saved successfully[/green]")
+                if user_info:
+                    console.print(
+                        f"[dim]Authenticated as: {user_info.get('name', 'Unknown')}[/dim]"
+                    )
+                    if user_info.get("email"):
+                        console.print(f"[dim]Email: {user_info.get('email')}[/dim]")
+                console.print(
+                    "[dim]The token will be used automatically when accessing gated models.[/dim]"
+                )
+            else:
+                console.print("[red]✗ Token validation failed[/red]")
+                console.print("[dim]The token appears to be invalid or expired.[/dim]")
+                console.print("[dim]Please check your token and try again.[/dim]")
+
+                # Ask if they want to save it anyway
+                confirm = input("\nSave the token anyway? (y/N): ").strip().lower()
+                if confirm == "y":
+                    config_manager.config["hf_token"] = token
+                    config_manager._save_config()
+                    console.print(
+                        "[yellow]Token saved (but may not work properly)[/yellow]"
+                    )
+        else:
+            console.print("[yellow]No token provided[/yellow]")
+
+    elif action == "Remove Token":
+        if current_token:
+            confirm = (
+                input("Are you sure you want to remove the token? (y/N): ")
+                .strip()
+                .lower()
+            )
+            if confirm == "y":
+                config_manager.config.pop("hf_token", None)
+                config_manager._save_config()
+                console.print("[green]Token removed successfully[/green]")
+        else:
+            console.print("[yellow]No token to remove[/yellow]")
+
+    elif action == "Test Token":
+        if not current_token:
+            console.print("[red]No token configured[/red]")
+        else:
+            console.print("\n[cyan]Testing HuggingFace token...[/cyan]")
+            try:
+                import requests
+
+                # Use the HuggingFace whoami-v2 API endpoint
+                response = requests.get(
+                    "https://huggingface.co/api/whoami-v2",
+                    headers={"Authorization": f"Bearer {current_token}"},
+                    timeout=10,
+                )
+
+                if response.status_code == 200:
+                    user_info = response.json()
+                    console.print("[green]✓ Token is valid[/green]")
+                    console.print(
+                        f"[dim]Authenticated as: {user_info.get('name', 'Unknown')}[/dim]"
+                    )
+                    console.print(
+                        f"[dim]Email: {user_info.get('email', 'Not available')}[/dim]"
+                    )
+                    if user_info.get("orgs"):
+                        org_names = [
+                            org.get("name", "Unknown")
+                            for org in user_info.get("orgs", [])
+                        ]
+                        console.print(
+                            f"[dim]Organizations: {', '.join(org_names)}[/dim]"
+                        )
+                elif response.status_code == 401:
+                    console.print("[red]✗ Token is invalid or expired[/red]")
+                    console.print("[dim]Please check your token and try again[/dim]")
+                else:
+                    console.print(
+                        f"[red]✗ Token validation failed (HTTP {response.status_code})[/red]"
+                    )
+                    console.print(f"[dim]Response: {response.text}[/dim]")
+            except requests.exceptions.Timeout:
+                console.print("[red]Token test timed out[/red]")
+                console.print("[dim]Check your internet connection[/dim]")
+            except requests.exceptions.ConnectionError:
+                console.print("[red]Failed to connect to HuggingFace API[/red]")
+                console.print("[dim]Check your internet connection[/dim]")
+            except Exception as e:
+                console.print(f"[red]Error testing token: {e}[/red]")
+
+    elif action == "View Token Info":
+        if not current_token:
+            console.print("[red]No token configured[/red]")
+        else:
+            console.print("\n[bold]Token Information:[/bold]")
+            console.print(f"Token prefix: {current_token[:8]}...")
+            console.print(f"Token suffix: ...{current_token[-4:]}")
+            console.print(f"Token length: {len(current_token)} characters")
+            console.print(
+                "\n[dim]To get more information, use 'Test Token' option[/dim]"
+            )
+
+    input("\nPress Enter to continue...")
+    return "continue"
 
 
 def configure_server_defaults() -> str:

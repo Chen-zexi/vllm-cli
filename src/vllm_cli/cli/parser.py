@@ -128,6 +128,12 @@ def _add_serve_parser(subparsers) -> None:
         help="Enable LoRA adapter support (auto-enabled if --lora is used)",
     )
 
+    # Authentication options
+    serve_parser.add_argument(
+        "--hf-token",
+        help="HuggingFace token for accessing gated models (can also set via Settings menu)",
+    )
+
     # Advanced options
     serve_parser.add_argument(
         "--extra-args",

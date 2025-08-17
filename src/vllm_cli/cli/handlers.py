@@ -397,6 +397,32 @@ def _build_serve_config(
         config["host"] = args.host
     if args.quantization:
         config["quantization"] = args.quantization
+
+    # Handle HF token if provided via CLI
+    if hasattr(args, "hf_token") and args.hf_token:
+        console.print("[cyan]Validating HuggingFace token...[/cyan]")
+
+        from ..validation.token import validate_hf_token
+
+        is_valid, user_info = validate_hf_token(args.hf_token)
+
+        if is_valid:
+            # Save the token to config for this session
+            config_manager.config["hf_token"] = args.hf_token
+            config_manager._save_config()
+            console.print("[green]✓ Token validated and saved[/green]")
+            if user_info:
+                console.print(
+                    f"[dim]Authenticated as: {user_info.get('name', 'Unknown')}[/dim]"
+                )
+        else:
+            console.print("[yellow]Warning: Token validation failed[/yellow]")
+            console.print(
+                "[dim]The token may be invalid or expired. Continuing anyway...[/dim]"
+            )
+            # Still save it in case it's a network issue or special token type
+            config_manager.config["hf_token"] = args.hf_token
+            config_manager._save_config()
     if args.tensor_parallel_size:
         config["tensor_parallel_size"] = args.tensor_parallel_size
     if args.gpu_memory_utilization != 0.9:

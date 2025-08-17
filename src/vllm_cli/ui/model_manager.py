@@ -25,6 +25,10 @@ def enter_remote_model() -> Optional[str]:
     Returns:
         Model ID string or None if cancelled
     """
+    import getpass
+
+    from ..config import ConfigManager
+
     console.print("\n[bold cyan]Remote Model Selection[/bold cyan]")
     console.print("\nEnter a HuggingFace model ID to serve directly from the Hub.")
     console.print("The model will be automatically downloaded on first use.\n")
@@ -66,6 +70,77 @@ def enter_remote_model() -> Optional[str]:
 
         # Confirm the selection
         console.print(f"\n[bold]Selected model:[/bold] {model_id}")
+
+        # Check for HF token and offer to configure if needed
+        config_manager = ConfigManager()
+        has_token = bool(config_manager.config.get("hf_token"))
+
+        if has_token:
+            console.print("[green]✓ HuggingFace token is configured[/green]")
+        else:
+            console.print(
+                "\n[dim]Note: Some models require a HuggingFace token for access.[/dim]"
+            )
+            console.print(
+                "[dim]If this model is gated, you'll need to provide a token.[/dim]\n"
+            )
+
+            token_options = ["Configure HF token now", "Continue without token"]
+
+            token_action = unified_prompt(
+                "token_action",
+                "Would you like to configure a HuggingFace token?",
+                token_options,
+            )
+
+            if token_action == "Configure HF token now":
+                console.print("\n[cyan]Enter your HuggingFace token:[/cyan]")
+                console.print(
+                    "[dim]Get your token from: https://huggingface.co/settings/tokens[/dim]"
+                )
+                console.print("[dim]The token will be hidden as you type.[/dim]\n")
+
+                token = getpass.getpass("Token: ").strip()
+                if token:
+                    console.print("\n[cyan]Validating token...[/cyan]")
+
+                    from ..validation.token import validate_hf_token
+
+                    is_valid, user_info = validate_hf_token(token)
+
+                    if is_valid:
+                        config_manager.config["hf_token"] = token
+                        config_manager._save_config()
+                        console.print(
+                            "[green]✓ Token validated and saved successfully[/green]"
+                        )
+                        if user_info:
+                            console.print(
+                                f"[dim]Authenticated as: {user_info.get('name', 'Unknown')}[/dim]\n"
+                            )
+                    else:
+                        console.print("[red]✗ Token validation failed[/red]")
+                        console.print("[dim]The token may be invalid or expired.[/dim]")
+
+                        # Ask if they want to continue anyway
+                        confirm = (
+                            input("\nContinue with this token anyway? (y/N): ")
+                            .strip()
+                            .lower()
+                        )
+                        if confirm == "y":
+                            config_manager.config["hf_token"] = token
+                            config_manager._save_config()
+                            console.print(
+                                "[yellow]Token saved (but may not work)[/yellow]\n"
+                            )
+                        else:
+                            console.print("[yellow]Continuing without token[/yellow]\n")
+                else:
+                    console.print(
+                        "[yellow]No token provided, continuing without token[/yellow]\n"
+                    )
+
         console.print(
             "\n[yellow]Warning:[/yellow] This model will be downloaded from HuggingFace Hub."
         )
