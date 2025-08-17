@@ -153,3 +153,5 @@ cython_debug/
 config.yaml
 profiles.yaml
 cache.json
+
+internal_docs/

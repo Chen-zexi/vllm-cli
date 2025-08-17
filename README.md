@@ -2,7 +2,7 @@
 
 [![PyPI version](https://badge.fury.io/py/vllm-cli.svg)](https://badge.fury.io/py/vllm-cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 
 A command-line interface tool for serving Large Language Models using vLLM. Provides both interactive and command-line modes with features for configuration profiles, model management, and server monitoring.
 
@@ -20,6 +20,20 @@ A command-line interface tool for serving Large Language Models using vLLM. Prov
 - **System Information**: GPU, memory, and CUDA compatibility checking
 - **Log Viewer**: View the complete log file when server startup fails
 
+## New Features in v0.2.0
+
+### LoRA Adapter Support
+![LoRA Serving](asset/lora-serving.png)
+*Serve models with LoRA adapters - select base model and multiple LoRA adapters for serving*
+
+### Enhanced Model List Display
+![Model List Display](asset/model-list-display.png)
+*Comprehensive model listing showing HuggingFace models, LoRA adapters, and datasets with size information*
+
+### Model Directory Management
+![Model Directory Management](asset/model-directory-management.png)
+*Configure and manage custom model directories for automatic model discovery*
+
 ### Server Monitoring
 ![Server Monitoring](asset/server-monitoring.png)
 *Real-time server monitoring showing GPU utilization, server status, and streaming logs*
@@ -28,7 +42,7 @@ A command-line interface tool for serving Large Language Models using vLLM. Prov
 
 ### Prerequisites
 
-- Python 3.8+
+- Python 3.11+
 - CUDA-compatible GPU (recommended)
 - vLLM package installed
 
@@ -45,9 +59,7 @@ pip install vllm-cli
 git clone https://github.com/Chen-zexi/vllm-cli.git
 cd vllm-cli
 
-# Create conda environment
-conda create -n vllm-cli python=3.11
-conda activate vllm-cli
+# Activate the environment you have vLLM installed in
 
 # Install dependencies
 pip install -r requirements.txt
@@ -221,6 +233,20 @@ Note: Following dependencies are downloaded along with vLLM CLI:
 - Inquirer (interactive prompts)
 - psutil (system monitoring)
 - PyYAML (configuration parsing)
+
+## Roadmap
+
+### To-Do List
+
+- [ ] **AMD GPU Support** - Add support for AMD GPUs (ROCm) in addition to NVIDIA CUDA
+- [ ] **Local Model Support** - Add support to load local models from non-HuggingFace directory formats:
+  - [ ] Oracle Cloud Infrastructure (OCI) Registry format
+  - [ ] Ollama model format
+  - [ ] Other local model formats
+
+### Future Enhancements
+
+Additional features and improvements planned for future releases will be added here as the project evolves.
 
 ## License
 
