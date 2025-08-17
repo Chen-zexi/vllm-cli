@@ -33,6 +33,7 @@ dependencies = [
     "pydantic>=2.0",
     "pyyaml>=6.0",
     "hf-model-tool>=0.2.3",
+    "requests>=2.28.0",
 ]
 
 [project.optional-dependencies]
@@ -40,6 +41,7 @@ test = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
     "pytest-mock>=3.10.0",
+    "requests>=2.28.0",
 ]
 dev = [
     "pytest>=7.0.0",
