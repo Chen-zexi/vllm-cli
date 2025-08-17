@@ -27,6 +27,7 @@ from .manager import (
 # Discovery functions
 from .discovery import (
     scan_for_models,
+    scan_for_lora_adapters,
     build_model_dict,
     validate_model_path,
     find_model_by_name,
@@ -58,6 +59,7 @@ __all__ = [
     "search_models",
     # Discovery
     "scan_for_models",
+    "scan_for_lora_adapters",
     "build_model_dict",
     "validate_model_path",
     "find_model_by_name",

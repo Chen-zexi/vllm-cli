@@ -403,7 +403,79 @@ def _build_serve_config(
         config["max_model_len"] = args.max_model_len
     if args.dtype != "auto":
         config["dtype"] = args.dtype
+    
+    # Handle LoRA adapters
+    if hasattr(args, "lora") and args.lora:
+        # Enable LoRA if adapters are specified
+        config["enable_lora"] = True
+        
+        # Format LoRA modules for vLLM
+        lora_modules = []
+        for lora_spec in args.lora:
+            if "=" in lora_spec:
+                # Format: name=path
+                lora_modules.append(lora_spec)
+            else:
+                # Just path, generate a name from the path
+                from pathlib import Path
+                lora_path = Path(lora_spec)
+                lora_name = lora_path.name.replace("-", "_").replace(" ", "_")
+                lora_modules.append(f"{lora_name}={lora_spec}")
+        
+        # Join modules for command line
+        config["lora_modules"] = " ".join(lora_modules)
+        
+        console.print(f"[blue]Enabling LoRA with {len(lora_modules)} adapter(s)[/blue]")
+        for module in lora_modules:
+            console.print(f"  • {module}")
+    
+    elif hasattr(args, "enable_lora") and args.enable_lora:
+        config["enable_lora"] = True
+    
     if args.extra_args:
         config["extra_args"] = args.extra_args
 
     return config
+
+
+def handle_dirs(args: argparse.Namespace) -> bool:
+    """
+    Directory management is now handled by hf-model-tool.
+    This command redirects users to use hf-model-tool.
+    
+    Args:
+        args: Parsed command line arguments
+    
+    Returns:
+        True if operation succeeded, False otherwise
+    """
+    import subprocess
+    import os
+    
+    console.print("[yellow]Directory management has moved to hf-model-tool[/yellow]")
+    console.print("\nYou can manage directories using:")
+    console.print("  • [cyan]hf-model-tool[/cyan] - Interactive interface with Config menu")
+    console.print("  • [cyan]hf-model-tool --add-path <path>[/cyan] - Add a directory directly")
+    
+    if hasattr(args, 'dirs_command'):
+        if args.dirs_command in ["add", "remove", "list"]:
+            console.print(f"\n[dim]Launching hf-model-tool for directory management...[/dim]")
+            
+            try:
+                # Launch hf-model-tool 
+                if args.dirs_command == "add" and hasattr(args, 'path'):
+                    # If adding a path, use the --add-path argument
+                    subprocess.run(["hf-model-tool", "--add-path", args.path], env=os.environ.copy())
+                else:
+                    # Otherwise launch interactive mode
+                    subprocess.run(["hf-model-tool"], env=os.environ.copy())
+                return True
+            except FileNotFoundError:
+                console.print("\n[red]hf-model-tool not found. Please install it:[/red]")
+                console.print("  pip install hf-model-tool")
+                return False
+            except Exception as e:
+                console.print(f"\n[red]Error launching hf-model-tool: {e}[/red]")
+                return False
+    
+    return True

@@ -212,6 +212,35 @@
       "importance": "low",
       "depends_on": "enable_lora"
     },
+    "lora_modules": {
+      "type": "string",
+      "category": "optimization",
+      "description": "LoRA modules to load (JSON format or name=path pairs)",
+      "default": null,
+      "cli_flag": "--lora-modules",
+      "importance": "high",
+      "depends_on": "enable_lora"
+    },
+    "max_lora_rank": {
+      "type": "integer",
+      "category": "optimization",
+      "description": "Maximum rank for LoRA adapters",
+      "default": null,
+      "cli_flag": "--max-lora-rank",
+      "validation": {"min": 1, "max": 256},
+      "importance": "low",
+      "depends_on": "enable_lora"
+    },
+    "max_cpu_loras": {
+      "type": "integer",
+      "category": "optimization",
+      "description": "Maximum number of LoRA adapters that can be loaded on CPU",
+      "default": null,
+      "cli_flag": "--max-cpu-loras",
+      "validation": {"min": 0, "max": 100},
+      "importance": "low",
+      "depends_on": "enable_lora"
+    },
     "api_key": {
       "type": "string",
       "category": "api",

@@ -26,30 +26,45 @@ def handle_settings() -> str:
     """
     Handle settings and configuration.
     """
-    settings_options = [
-        "Manage Profiles",
-        "Server Defaults",
-        "UI Preferences",
-        "Clear Cache",
-    ]
+    while True:
+        settings_options = [
+            "Manage Profiles",
+            "Model Directories",
+            "Server Defaults",
+            "UI Preferences",
+            "Clear Cache",
+        ]
 
-    action = unified_prompt("settings", "Settings", settings_options, allow_back=True)
+        action = unified_prompt("settings", "Settings", settings_options, allow_back=True)
 
-    if action == "BACK" or not action:
-        return "continue"
-    elif action == "Manage Profiles":
-        return manage_profiles()
-    elif action == "Server Defaults":
-        return configure_server_defaults()
-    elif action == "UI Preferences":
-        return configure_ui_preferences()
-    elif action == "Clear Cache":
-        config_manager = ConfigManager()
-        config_manager.clear_cache()
-        console.print("[green]Cache cleared.[/green]")
-        input("\nPress Enter to continue...")
+        if action == "← Back" or action == "BACK" or not action:
+            return "continue"
+        elif action == "Manage Profiles":
+            manage_profiles()
+        elif action == "Model Directories":
+            manage_model_directories()
+        elif action == "Server Defaults":
+            configure_server_defaults()
+        elif action == "UI Preferences":
+            configure_ui_preferences()
+        elif action == "Clear Cache":
+            config_manager = ConfigManager()
+            config_manager.clear_cache()
+            console.print("[green]Cache cleared.[/green]")
+            input("\nPress Enter to continue...")
 
     return "continue"
+
+
+def manage_model_directories() -> str:
+    """
+    Manage model directories using integrated hf-model-tool API.
+    
+    This function uses the hf-model-tool API directly to provide
+    a seamless directory management experience within vLLM CLI.
+    """
+    from .model_directories import manage_model_directories as manage_dirs
+    return manage_dirs()
 
 
 def configure_server_defaults() -> str:

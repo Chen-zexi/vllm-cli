@@ -19,6 +19,7 @@ from .handlers import (
     handle_models,
     handle_status,
     handle_stop,
+    handle_dirs,
 )
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,7 @@ def handle_cli_command(args: argparse.Namespace) -> bool:
             "models": handle_models,
             "status": handle_status,
             "stop": handle_stop,
+            "dirs": handle_dirs,
         }
 
         command = args.command

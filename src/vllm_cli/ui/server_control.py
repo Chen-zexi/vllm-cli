@@ -20,7 +20,7 @@ from ..config import ConfigManager
 from ..server import VLLMServer
 from .navigation import unified_prompt
 from .log_viewer import show_log_menu
-from ..system import get_gpu_info
+from ..system import get_gpu_info, format_size
 from .common import console, create_panel
 from .display import display_config, select_profile
 from .model_manager import select_model
@@ -65,10 +65,22 @@ def handle_serve_with_profile() -> str:
     """
     Serve a model with a pre-configured profile.
     """
-    # Select model
-    model = select_model()
-    if not model:
+    # Select model (can return string or dict with LoRA config)
+    model_selection = select_model()
+    if not model_selection:
         return "continue"
+
+    # Handle LoRA model selection
+    lora_modules = None
+    if isinstance(model_selection, dict) and "lora_modules" in model_selection:
+        # New format from select_model_with_lora
+        model = model_selection["model"]
+        lora_modules = model_selection["lora_modules"]
+        # Store the full config for later processing
+        model_config = model_selection
+    else:
+        model = model_selection
+        model_config = None
 
     # Select profile
     profile_name = select_profile()
@@ -83,7 +95,12 @@ def handle_serve_with_profile() -> str:
         return "continue"
 
     config = profile.get("config", {}).copy()
-    config["model"] = model
+    
+    # If we have LoRA modules, update the config
+    if model_config:
+        config["model"] = model_config  # Pass the full dict with LoRA info
+    else:
+        config["model"] = model
 
     # Apply dynamic defaults for display
     profile_manager = config_manager.profile_manager
@@ -92,6 +109,16 @@ def handle_serve_with_profile() -> str:
     # Show configuration
     console.print("\n[bold cyan]Configuration:[/bold cyan]")
     display_config(config_with_defaults)
+    
+    # Show LoRA adapters if present
+    if lora_modules:
+        console.print(f"\n[cyan]LoRA Adapters ({len(lora_modules)}):[/cyan]")
+        for lora in lora_modules:
+            name = lora.get("name", "unknown")
+            rank = lora.get("rank", 16)
+            path = lora.get("path", "")
+            console.print(f"  • {name} (rank={rank})")
+            console.print(f"    Path: {path}")
 
     # Confirm and start
     confirm = inquirer.confirm("Start server with this configuration?", default=True)
@@ -111,16 +138,33 @@ def handle_custom_config() -> str:
     """
     from .custom_config import configure_by_categories
 
-    # Select model
-    model = select_model()
-    if not model:
+    # Select model (can return string or dict with LoRA config)
+    model_selection = select_model()
+    if not model_selection:
         return "continue"
+
+    # Handle LoRA model selection
+    lora_modules = None
+    if isinstance(model_selection, dict) and "lora_modules" in model_selection:
+        # New format from select_model_with_lora
+        model = model_selection["model"]
+        lora_modules = model_selection["lora_modules"]
+        # Store the full config for later processing
+        model_config = model_selection
+    else:
+        model = model_selection
+        model_config = None
 
     console.print("\n[bold cyan]Custom Configuration[/bold cyan]")
 
     # Use category-based configuration
     config = configure_by_categories({"model": model})
-    config["model"] = model  # Ensure model is set
+    
+    # If we have LoRA modules, update the config
+    if model_config:
+        config["model"] = model_config  # Pass the full dict with LoRA info
+    else:
+        config["model"] = model
 
     # Apply dynamic defaults for display
     config_manager = ConfigManager()
@@ -130,6 +174,16 @@ def handle_custom_config() -> str:
     # Show configuration summary
     console.print("\n[bold cyan]Configuration Summary:[/bold cyan]")
     display_config(config_with_defaults)
+    
+    # Show LoRA adapters if present
+    if lora_modules:
+        console.print(f"\n[cyan]LoRA Adapters ({len(lora_modules)}):[/cyan]")
+        for lora in lora_modules:
+            name = lora.get("name", "unknown")
+            rank = lora.get("rank", 16)
+            path = lora.get("path", "")
+            console.print(f"  • {name} (rank={rank})")
+            console.print(f"    Path: {path}")
 
     # Option to add custom vLLM arguments
     use_advanced = inquirer.confirm("Add custom vLLM arguments?", default=False)
@@ -162,6 +216,8 @@ def handle_custom_config() -> str:
                 "description": "Custom configuration",
                 "icon": "",
                 "config": config,  # Save original config without dynamic defaults
+                "lora_adapters": lora_modules if lora_modules else None,  # Save LoRA adapter info if present
+                "api_usage_info": config.get("api_usage_info")  # Save API usage info
             }
             config_manager.save_user_profile(profile_name, profile_data)
             console.print(f"[green]Profile '{profile_name}' saved.[/green]")
@@ -213,9 +269,24 @@ def start_server_with_config(config: Dict[str, Any]) -> str:
 
         console.print()  # Add spacing
 
-    # Check if this is a remote model
-    model_name = config.get("model", "")
-    is_remote_model = "/" in model_name and not model_name.startswith("/")
+    # Check if this is a remote model by checking if it exists locally
+    model_config = config.get("model", "")
+    
+    # Extract model name from LoRA config if needed
+    if isinstance(model_config, dict):
+        model_name = model_config.get("model", "")
+    else:
+        model_name = model_config
+    
+    # Check if model exists in local cache
+    from ..models import list_available_models
+    local_models = list_available_models()
+    local_model_names = [m.get("name", "") for m in local_models]
+    
+    # A model is remote if it has "/" (HuggingFace format) and is NOT in local cache
+    is_remote_model = ("/" in model_name and 
+                       not model_name.startswith("/") and 
+                       model_name not in local_model_names)
     
     if is_remote_model:
         console.print(f"\n[bold cyan]Starting vLLM server with remote model:[/bold cyan] {model_name}")
@@ -264,9 +335,14 @@ def start_server_with_config(config: Dict[str, Any]) -> str:
         # Initial GPU panel
         layout["gpu"].update(create_gpu_status_panel())
 
+        # Extract model name for display
+        model_display = config.get('model', 'unknown')
+        if isinstance(model_display, dict):
+            model_display = model_display.get('model', 'unknown')
+            
         layout["info"].update(
             create_panel(
-                f"Port: {server.port} | Model: {config.get('model', 'unknown')}",
+                f"Port: {server.port} | Model: {model_display}",
                 title="Info",
                 border_style="blue",
             )

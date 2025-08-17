@@ -55,7 +55,16 @@ class VLLMServer:
                    port, and other vLLM-specific parameters
         """
         self.config: Dict[str, Any] = config
-        self.model: str = config.get("model", "unknown")
+        
+        # Extract model name - handle both string and dict (LoRA config) formats
+        model_config = config.get("model", "unknown")
+        if isinstance(model_config, dict):
+            # LoRA configuration - extract base model name
+            self.model: str = model_config.get("model", "unknown")
+        else:
+            # Regular string model name
+            self.model: str = model_config
+            
         self.port: int = config.get("port", 8000)
         self.process: Optional[Union[subprocess.Popen, Any]] = None
         self.log_file: Optional[TextIO] = None

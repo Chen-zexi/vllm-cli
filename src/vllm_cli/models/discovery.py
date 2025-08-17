@@ -23,7 +23,25 @@ def scan_for_models() -> List[Dict[str, Any]]:
         List of model information dictionaries
     """
     try:
-        # Try using hf-model-tool first
+        # Try using shared registry first for best performance
+        from hf_model_tool import get_registry
+        registry = get_registry()
+        registry.scan_all()  # Ensure data is current
+        
+        # Get all models (including custom)
+        models = list(registry.models.values())
+        models.extend(registry.custom_models.values())
+        
+        if models:
+            logger.info(f"Found {len(models)} models via ModelRegistry")
+            return models
+    except ImportError:
+        pass  # Try legacy method
+    except Exception as e:
+        logger.debug(f"Registry not available: {e}")
+    
+    try:
+        # Try using hf-model-tool API or legacy method
         models = _scan_with_hf_model_tool()
         if models:
             logger.info(f"Found {len(models)} models via hf-model-tool")
@@ -45,23 +63,314 @@ def _scan_with_hf_model_tool() -> List[Dict[str, Any]]:
     Returns:
         List of model dictionaries from hf-model-tool
     """
-    from hf_model_tool.cache import scan_all_directories
+    try:
+        from hf_model_tool import HFModelAPI
+        # Use new API if available
+        api = HFModelAPI()
+        logger.debug("Scanning for models using HFModelAPI...")
+        
+        # Get all models (not LoRA or datasets)
+        models = api.list_assets(asset_type='model', include_lora=False, include_datasets=False)
+        
+        # Also get custom models
+        custom_models = api.list_assets(asset_type='custom_model', include_lora=False, include_datasets=False)
+        models.extend(custom_models)
+        
+        return models
+    except ImportError:
+        # Fallback to old method
+        from hf_model_tool.cache import scan_all_directories
+        
+        logger.debug("Scanning for models using hf-model-tool cache (legacy)...")
+        
+        # Get all items with full details
+        all_items = scan_all_directories()
+        
+        if not all_items:
+            return []
+        
+        # Filter for models only (not datasets or other assets)
+        models = []
+        for item in all_items:
+            if item.get("type") in ["model", "custom_model"]:
+                models.append(item)
+        
+        return models
 
-    logger.debug("Scanning for models using hf-model-tool...")
 
-    # Get all items with full details
-    all_items = scan_all_directories()
+def scan_for_lora_adapters() -> List[Dict[str, Any]]:
+    """
+    Scan for available LoRA adapters.
+    
+    Returns:
+        List of LoRA adapter information dictionaries
+    """
+    try:
+        # Try using shared registry first for best performance
+        from hf_model_tool import get_registry
+        registry = get_registry()
+        registry.scan_all()  # Ensure data is current
+        
+        adapters = list(registry.lora_adapters.values())
+        if adapters:
+            # Process adapters to ensure correct path and rank
+            for adapter in adapters:
+                # Extract metadata fields to top level
+                if "metadata" in adapter:
+                    metadata = adapter["metadata"]
+                    if isinstance(metadata, dict):
+                        adapter["base_model"] = metadata.get("base_model", "unknown")
+                        adapter["rank"] = metadata.get("lora_rank", metadata.get("rank", metadata.get("r", 16)))
+                
+                # Use lora_path if available
+                if "lora_path" in adapter and adapter["lora_path"]:
+                    adapter["path"] = adapter["lora_path"]
+            
+            logger.info(f"Found {len(adapters)} LoRA adapters via ModelRegistry")
+            return adapters
+    except ImportError:
+        pass  # Try legacy method
+    except Exception as e:
+        logger.debug(f"Registry not available: {e}")
+    
+    try:
+        # Try using hf-model-tool API or legacy method
+        adapters = _scan_lora_with_hf_model_tool()
+        if adapters:
+            logger.info(f"Found {len(adapters)} LoRA adapters via hf-model-tool")
+            return adapters
+    except ImportError:
+        logger.warning("hf-model-tool not available for LoRA scanning")
+    except Exception as e:
+        logger.error(f"Error scanning LoRA adapters with hf-model-tool: {e}")
+    
+    # Fallback to manual search
+    return _fallback_lora_search()
 
-    if not all_items:
-        return []
 
-    # Filter for models only (not datasets or other assets)
-    models = []
-    for item in all_items:
-        if item.get("type") in ["model", "custom_model"]:
-            models.append(item)
+def _scan_lora_with_hf_model_tool() -> List[Dict[str, Any]]:
+    """
+    Scan for LoRA adapters using hf-model-tool.
+    
+    Returns:
+        List of LoRA adapter dictionaries
+    """
+    try:
+        from hf_model_tool import HFModelAPI
+        # Use new API if available
+        api = HFModelAPI()
+        logger.debug("Scanning for LoRA adapters using HFModelAPI...")
+        
+        # Get all LoRA adapters with enriched details
+        adapters = api.list_lora_adapters()
+        
+        # Ensure all adapters have the expected fields
+        for adapter in adapters:
+            # Extract metadata fields to top level for compatibility
+            if "metadata" in adapter:
+                metadata = adapter["metadata"]
+                if isinstance(metadata, dict):
+                    adapter["base_model"] = metadata.get("base_model", "unknown")
+                    adapter["trained_on"] = metadata.get("trained_on", "unknown")
+                    adapter["rank"] = metadata.get("lora_rank", metadata.get("rank", metadata.get("r", 16)))
+            
+            # Ensure rank is at top level
+            if "rank" not in adapter and "metadata" in adapter:
+                adapter["rank"] = adapter["metadata"].get("lora_rank", 
+                                   adapter["metadata"].get("rank", 
+                                   adapter["metadata"].get("r", 16)))
+            
+            # Use lora_path if available (the actual adapter directory)
+            # This is important as hf-model-tool returns both path (parent) and lora_path (actual adapter)
+            if "lora_path" in adapter and adapter["lora_path"]:
+                adapter["path"] = adapter["lora_path"]
+        
+        return adapters
+        
+    except ImportError:
+        # Fallback to old method
+        from hf_model_tool.cache import scan_all_directories
+        
+        logger.debug("Scanning for LoRA adapters using hf-model-tool cache (legacy)...")
+        
+        # Get all items with full details
+        all_items = scan_all_directories()
+        
+        if not all_items:
+            return []
+        
+        # Filter for LoRA adapters
+        adapters = []
+        for item in all_items:
+            if item.get("type") == "lora_adapter":
+                # Add additional LoRA-specific information
+                adapter_info = item.copy()
+                
+                # Extract base model requirement if available
+                if "metadata" in adapter_info:
+                    metadata = adapter_info["metadata"]
+                    if isinstance(metadata, dict):
+                        adapter_info["base_model"] = metadata.get("base_model", "unknown")
+                        adapter_info["trained_on"] = metadata.get("trained_on", "unknown")
+                        # Look for rank in both 'rank' and 'lora_rank' keys
+                        adapter_info["rank"] = metadata.get("lora_rank", metadata.get("rank", metadata.get("r", 16)))
+                
+                # Use lora_path if available (from AssetDetector)
+                if "lora_path" in item:
+                    adapter_info["path"] = item["lora_path"]
+                
+                # Ensure rank is available at top level
+                if "rank" not in adapter_info and "metadata" in adapter_info:
+                    # Look for rank in both 'lora_rank' and 'rank' keys
+                    adapter_info["rank"] = adapter_info["metadata"].get("lora_rank", 
+                                            adapter_info["metadata"].get("rank", 
+                                            adapter_info["metadata"].get("r", 16)))
+                
+                adapters.append(adapter_info)
+        
+        return adapters
 
-    return models
+
+def _fallback_lora_search() -> List[Dict[str, Any]]:
+    """
+    Fallback method to search for LoRA adapters.
+    
+    Returns:
+        List of found LoRA adapters
+    """
+    from .directories import DirectoryManager
+    
+    adapters = []
+    dir_manager = DirectoryManager()
+    
+    # Get directories to search
+    search_paths = dir_manager.get_lora_directories()
+    if not search_paths:
+        search_paths = dir_manager.get_model_directories()
+    
+    for base_path in search_paths:
+        if not base_path.exists():
+            continue
+        
+        try:
+            adapters.extend(_scan_directory_for_lora(base_path))
+        except Exception as e:
+            logger.warning(f"Error searching {base_path} for LoRA: {e}")
+    
+    logger.info(f"Found {len(adapters)} LoRA adapters via fallback search")
+    return adapters
+
+
+def _scan_directory_for_lora(base_path: Path) -> List[Dict[str, Any]]:
+    """
+    Scan a directory for LoRA adapter files.
+    
+    Args:
+        base_path: Base directory to scan
+    
+    Returns:
+        List of LoRA adapter dictionaries
+    """
+    adapters = []
+    
+    # Look for adapter directories
+    for adapter_dir in base_path.rglob("*"):
+        if not adapter_dir.is_dir():
+            continue
+        
+        # Check if it contains LoRA adapter files
+        if _is_lora_directory(adapter_dir):
+            adapter_info = _extract_lora_info(adapter_dir)
+            if adapter_info:
+                adapters.append(adapter_info)
+    
+    return adapters
+
+
+def _is_lora_directory(directory: Path) -> bool:
+    """
+    Check if a directory contains a LoRA adapter.
+    
+    Args:
+        directory: Directory to check
+    
+    Returns:
+        True if directory contains a LoRA adapter
+    """
+    # Check for adapter configuration file
+    adapter_config = directory / "adapter_config.json"
+    if not adapter_config.exists():
+        return False
+    
+    # Check for adapter weights
+    adapter_patterns = [
+        "adapter_model.safetensors",
+        "adapter_model.bin",
+        "pytorch_adapter.bin"
+    ]
+    
+    for pattern in adapter_patterns:
+        if (directory / pattern).exists():
+            return True
+    
+    return False
+
+
+def _extract_lora_info(adapter_dir: Path) -> Dict[str, Any]:
+    """
+    Extract information from a LoRA adapter directory.
+    
+    Args:
+        adapter_dir: Path to LoRA adapter directory
+    
+    Returns:
+        Dictionary with LoRA adapter information
+    """
+    import json
+    
+    try:
+        # Read adapter config
+        config_file = adapter_dir / "adapter_config.json"
+        base_model = "unknown"
+        task_type = "unknown"
+        rank = 16  # Default LoRA rank
+        
+        if config_file.exists():
+            try:
+                with open(config_file, "r") as f:
+                    config = json.load(f)
+                    base_model = config.get("base_model_name_or_path", "unknown")
+                    task_type = config.get("task_type", "unknown")
+                    # Extract LoRA rank (r parameter)
+                    rank = config.get("r", 16)
+            except Exception as e:
+                logger.debug(f"Error reading adapter config: {e}")
+        
+        # Calculate adapter size
+        size = sum(f.stat().st_size for f in adapter_dir.rglob("*") if f.is_file())
+        
+        # Extract adapter name from directory
+        adapter_name = adapter_dir.name
+        
+        return {
+            "name": adapter_name,
+            "type": "lora_adapter",
+            "path": str(adapter_dir),
+            "size": size,
+            "base_model": base_model,
+            "task_type": task_type,
+            "display_name": adapter_name,
+            "metadata": {
+                "base_model": base_model,
+                "task_type": task_type,
+                "rank": rank
+            },
+            "rank": rank  # Also store at top level for easy access
+        }
+    
+    except Exception as e:
+        logger.debug(f"Error extracting LoRA info from {adapter_dir}: {e}")
+        return {}
 
 
 def _fallback_model_search() -> List[Dict[str, Any]]:

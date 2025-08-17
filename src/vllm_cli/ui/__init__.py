@@ -19,7 +19,6 @@ from .server_monitor import monitor_server, monitor_active_servers
 from .model_manager import (
     select_model,
     handle_model_management,
-    show_model_details,
 )
 from .system_info import show_system_info
 from .profiles import (

@@ -107,6 +107,36 @@ class ProfileManager:
                     profile_name=name,
                     error_code="INVALID_PROFILE_TYPE",
                 )
+            
+            # Process LoRA configuration if present
+            if "config" in profile:
+                config = profile["config"]
+                
+                # Handle LoRA adapters in config
+                if "lora_adapters" in config:
+                    # Validate LoRA adapter entries
+                    lora_adapters = config["lora_adapters"]
+                    if isinstance(lora_adapters, list):
+                        # Ensure each adapter has required fields
+                        for adapter in lora_adapters:
+                            if not isinstance(adapter, dict):
+                                continue
+                            if "path" not in adapter and "name" in adapter:
+                                # Try to resolve adapter by name
+                                adapter["path"] = self._resolve_lora_path(adapter["name"])
+                    
+                    # Convert to lora_modules format for vLLM
+                    if lora_adapters:
+                        config["enable_lora"] = True
+                        lora_modules = []
+                        for adapter in lora_adapters:
+                            if isinstance(adapter, dict):
+                                name = adapter.get("name", "adapter")
+                                path = adapter.get("path", "")
+                                if path:
+                                    lora_modules.append(f"{name}={path}")
+                        if lora_modules:
+                            config["lora_modules"] = " ".join(lora_modules)
 
             # Save the profile
             self.user_profiles[name] = deepcopy(profile)
@@ -130,6 +160,26 @@ class ProfileManager:
                 profile_name=name,
                 error_code="PROFILE_SAVE_ERROR",
             ) from e
+    
+    def _resolve_lora_path(self, adapter_name: str) -> str:
+        """
+        Try to resolve a LoRA adapter path by name.
+        
+        Args:
+            adapter_name: Name of the LoRA adapter
+        
+        Returns:
+            Path to the adapter if found, empty string otherwise
+        """
+        try:
+            from ..models import scan_for_lora_adapters
+            adapters = scan_for_lora_adapters()
+            for adapter in adapters:
+                if adapter.get("name") == adapter_name or adapter.get("display_name") == adapter_name:
+                    return adapter.get("path", "")
+        except Exception as e:
+            logger.debug(f"Could not resolve LoRA path for {adapter_name}: {e}")
+        return ""
 
     def delete_user_profile(self, name: str) -> bool:
         """Delete a user profile."""

@@ -215,16 +215,65 @@ class ConfigManager:
         Build command-line arguments from a configuration dictionary.
 
         Only includes arguments that are explicitly set in the config.
+        Handles special cases like LoRA modules.
         """
         args = []
 
         # Special handling for model (positional argument)
-        if "model" in config:
+        # Check if this is a LoRA configuration
+        if isinstance(config.get("model"), dict) and "lora_modules" in config["model"]:
+            # Extract base model and LoRA config
+            lora_config = config["model"]
+            base_model = lora_config.get("model", "unknown")
+            args.extend(["serve", base_model])
+            
+            # Enable LoRA support when modules are present
+            args.append("--enable-lora")
+            
+            # Track maximum rank for all LoRA modules
+            max_rank = 16  # Default minimum
+            
+            # Add LoRA modules
+            for lora in lora_config.get("lora_modules", []):
+                lora_path = lora.get("path", "")
+                if lora_path:
+                    # vLLM expects --lora-modules with name=path format
+                    lora_name = lora.get("name", "adapter")
+                    args.extend(["--lora-modules", f"{lora_name}={lora_path}"])
+                    
+                    # Track maximum rank
+                    lora_rank = lora.get("rank", 16)
+                    max_rank = max(max_rank, lora_rank)
+            
+            # Add max-lora-rank parameter
+            args.extend(["--max-lora-rank", str(max_rank)])
+                    
+        elif "model" in config:
             args.extend(["serve", config["model"]])
+
+        # Handle lora_modules if present as a string (from CLI)
+        if "lora_modules" in config and config["lora_modules"]:
+            # Enable LoRA support
+            if "--enable-lora" not in args:
+                args.append("--enable-lora")
+            
+            # Parse and add LoRA modules
+            lora_modules_str = config["lora_modules"]
+            if isinstance(lora_modules_str, str):
+                # Split by space and add each module
+                for module in lora_modules_str.split():
+                    args.extend(["--lora-modules", module])
+                
+                # Add max-lora-rank if not already added
+                # Use a safe default of 64 which should cover most LoRA adapters
+                if "--max-lora-rank" not in args:
+                    # Check if max_lora_rank is explicitly set in config
+                    if "max_lora_rank" not in config:
+                        args.extend(["--max-lora-rank", "64"])
 
         for arg_name, value in config.items():
             # Skip special keys and None values
-            if arg_name in ["model", "name", "description", "icon"] or value is None:
+            if arg_name in ["model", "name", "description", "icon", "lora_modules"] or value is None:
                 continue
 
             arg_info = self.schema_manager.get_argument_info(arg_name)

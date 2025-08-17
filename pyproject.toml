@@ -4,19 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vllm-cli"
-version = "0.1.1"
+version = "0.2.0"
 authors = [
     { name="Zexi Chen", email="zzxxi.chen@gmail.com" },
 ]
 description = "A CLI tool to conveniently serve LLMs with vLLM"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.11"
 license = {text = "MIT"}
 classifiers = [
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Operating System :: POSIX :: Linux",
@@ -34,7 +30,7 @@ dependencies = [
     "psutil>=5.9",
     "pydantic>=2.0",
     "pyyaml>=6.0",
-    "hf-model-tool>=0.2.2",
+    "hf-model-tool>=0.2.3",
     "importlib-metadata>=4.0; python_version<'3.8'",
 ]
 

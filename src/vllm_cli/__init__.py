@@ -5,10 +5,8 @@ vLLM CLI Tool: A convenient CLI for serving LLMs with vLLM
 import sys
 
 # Get version from package metadata (pyproject.toml)
-if sys.version_info >= (3, 8):
-    from importlib.metadata import version, PackageNotFoundError
-else:
-    from importlib_metadata import version, PackageNotFoundError
+# Python 3.11+ has importlib.metadata built-in
+from importlib.metadata import version, PackageNotFoundError
 
 try:
     __version__ = version("vllm-cli")
