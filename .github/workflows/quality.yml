@@ -1,0 +1,200 @@
+name: Code Quality
+
+on:
+  schedule:
+    # Run weekly on Monday at 2 AM UTC
+    - cron: '0 2 * * 1'
+  workflow_dispatch:
+    inputs:
+      full_report:
+        description: 'Generate full quality report'
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Cache pip packages
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-coverage-${{ hashFiles('**/requirements.txt', '**/pyproject.toml') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-coverage-
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e .[test]
+        pip install hf-model-tool
+        pip install pytest-cov
+
+    - name: Run tests with coverage
+      run: |
+        pytest tests/ --cov=src/vllm_cli --cov-report=term-missing --cov-report=html --cov-report=xml
+      continue-on-error: true
+
+    - name: Upload coverage reports
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report
+        path: |
+          htmlcov/
+          coverage.xml
+        retention-days: 30
+
+    - name: Display coverage summary
+      run: |
+        echo "## Coverage Summary"
+        pytest tests/ --cov=src/vllm_cli --cov-report=term | tail -n 10
+      if: always()
+
+  dependency-check:
+    name: Dependency Check
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install pip-audit
+      run: |
+        python -m pip install --upgrade pip
+        pip install pip-audit
+
+    - name: Check for vulnerable dependencies
+      run: |
+        pip-audit --desc
+      continue-on-error: true
+
+    - name: Check for outdated dependencies
+      run: |
+        pip install pip-outdated
+        pip list --outdated
+      continue-on-error: true
+
+  complexity-analysis:
+    name: Code Complexity
+    runs-on: ubuntu-latest
+    if: github.event.inputs.full_report == 'true' || github.event_name == 'schedule'
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install analysis tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install radon xenon
+
+    - name: Cyclomatic Complexity
+      run: |
+        echo "## Cyclomatic Complexity Analysis"
+        radon cc src/vllm_cli -s -a
+      continue-on-error: true
+
+    - name: Maintainability Index
+      run: |
+        echo "## Maintainability Index"
+        radon mi src/vllm_cli -s
+      continue-on-error: true
+
+    - name: Check complexity thresholds
+      run: |
+        # Fail if any function has complexity > 20 (very high)
+        xenon --max-absolute B --max-modules B --max-average A src/vllm_cli
+      continue-on-error: true
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install bandit
+      run: |
+        python -m pip install --upgrade pip
+        pip install bandit[toml]
+
+    - name: Run security scan
+      run: |
+        bandit -r src/vllm_cli -f json -o bandit-report.json
+        bandit -r src/vllm_cli -f txt
+      continue-on-error: true
+
+    - name: Upload security report
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: security-report
+        path: bandit-report.json
+        retention-days: 30
+
+  documentation-check:
+    name: Documentation Check
+    runs-on: ubuntu-latest
+    if: github.event.inputs.full_report == 'true'
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install pydocstyle
+      run: |
+        python -m pip install --upgrade pip
+        pip install pydocstyle
+
+    - name: Check docstring style
+      run: |
+        # Check for missing docstrings (informational only)
+        pydocstyle src/vllm_cli --count --explain
+      continue-on-error: true
+
+  report-summary:
+    name: Quality Report Summary
+    runs-on: ubuntu-latest
+    needs: [coverage, dependency-check, complexity-analysis, security-scan]
+    if: always()
+
+    steps:
+    - name: Summary
+      run: |
+        echo "# Code Quality Report Summary"
+        echo ""
+        echo "## Workflow Status"
+        echo "- Coverage: ${{ needs.coverage.result }}"
+        echo "- Dependencies: ${{ needs.dependency-check.result }}"
+        echo "- Complexity: ${{ needs.complexity-analysis.result }}"
+        echo "- Security: ${{ needs.security-scan.result }}"
+        echo ""
+        echo "All quality checks are informational and do not block development."
+        echo "Review artifacts for detailed reports."

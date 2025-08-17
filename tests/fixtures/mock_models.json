@@ -1,0 +1,35 @@
+{
+  "models": [
+    {
+      "name": "meta-llama/Llama-2-7b-hf",
+      "path": "/models/llama-2-7b",
+      "size": 13000000000,
+      "type": "model",
+      "publisher": "meta-llama",
+      "display_name": "Llama-2-7b-hf",
+      "metadata": {
+        "architecture": "LlamaForCausalLM",
+        "hidden_size": 4096,
+        "num_layers": 32
+      }
+    },
+    {
+      "name": "mistralai/Mistral-7B-v0.1",
+      "path": "/models/mistral-7b",
+      "size": 14500000000,
+      "type": "model",
+      "publisher": "mistralai",
+      "display_name": "Mistral-7B-v0.1"
+    }
+  ],
+  "lora_adapters": [
+    {
+      "name": "alpaca-lora",
+      "path": "/adapters/alpaca",
+      "size": 100000000,
+      "type": "lora_adapter",
+      "base_model": "meta-llama/Llama-2-7b-hf",
+      "rank": 32
+    }
+  ]
+}

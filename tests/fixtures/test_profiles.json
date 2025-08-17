@@ -1,0 +1,14 @@
+{
+  "test_profile": {
+    "description": "Test profile for unit tests",
+    "max_model_len": 4096,
+    "gpu_memory_utilization": 0.8,
+    "tensor_parallel_size": 2
+  },
+  "custom_profile": {
+    "description": "Custom user profile",
+    "quantization": "awq",
+    "trust_remote_code": true,
+    "max_num_batched_tokens": 8192
+  }
+}

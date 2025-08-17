@@ -1,0 +1,28 @@
+# Development dependencies for vLLM CLI
+# Install with: pip install -r requirements-dev.txt
+
+# Testing
+pytest>=7.0.0
+pytest-cov>=4.0.0
+pytest-mock>=3.10.0
+
+# Code Quality
+flake8>=6.0.0
+black>=23.0.0
+autoflake>=2.0.0
+isort>=5.12.0
+
+# Type Checking
+mypy>=1.0.0
+types-PyYAML
+types-requests
+
+# Security
+bandit>=1.7.0
+
+# Documentation
+sphinx>=5.0.0
+sphinx-rtd-theme>=1.2.0
+
+# Pre-commit hooks (optional)
+pre-commit>=3.0.0

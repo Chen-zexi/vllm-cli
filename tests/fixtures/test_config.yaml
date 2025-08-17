@@ -1,0 +1,9 @@
+last_model: "meta-llama/Llama-2-7b-hf"
+last_config:
+  model: "meta-llama/Llama-2-7b-hf"
+  port: 8000
+  tensor_parallel_size: 1
+  gpu_memory_utilization: 0.9
+model_directories:
+  - "/home/test/.cache/huggingface/hub"
+  - "/home/test/models"
