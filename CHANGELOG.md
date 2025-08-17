@@ -13,11 +13,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Model Directory Management**: Configure and manage custom model directories for automatic model discovery
 - **Model Caching**: Performance optimization through intelligent caching with TTL for model listings
 - **Improved Model Discovery**: Integration with hf-model-tool for comprehensive model detection with fallback mechanisms
+- **HuggingFace Token Support**: Authentication support for accessing gated models with automatic token validation
+- **Profile Management Enhancements**:
+  - View/Edit profiles in unified interface with detailed configuration display
+  - Direct editing of built-in profiles with user overrides
+  - Reset customized built-in profiles to defaults
 
 ### Changed
 - Refactored model management system with new `models/` package structure
 - Enhanced error handling with comprehensive error recovery strategies
 - Improved configuration validation framework with type checking and schemas
+- Updated low_memory profile to use FP8 quantization instead of bitsandbytes
 
 ### Fixed
 - Better handling of model metadata extraction

@@ -22,7 +22,9 @@ A command-line interface tool for serving Large Language Models using vLLM. Prov
 - **System Information**: GPU, memory, and CUDA compatibility checking
 - **Log Viewer**: View the complete log file when server startup fails
 
-## New Features in v0.2.0
+## What's New -- New Features in v0.2.0
+
+See [CHANGELOG.md](CHANGELOG.md) for detailed release notes and version history.
 
 ### LoRA Adapter Support
 ![LoRA Serving](asset/lora-serving.png)
@@ -36,9 +38,6 @@ A command-line interface tool for serving Large Language Models using vLLM. Prov
 ![Model Directory Management](asset/model-directory-management.png)
 *Configure and manage custom model directories for automatic model discovery*
 
-### Server Monitoring
-![Server Monitoring](asset/server-monitoring.png)
-*Real-time server monitoring showing GPU utilization, server status, and streaming logs*
 
 ## Installation
 
@@ -71,6 +70,37 @@ pip install hf-model-tool
 pip install -e .
 ```
 
+## Important Notice
+
+### Model Compatibility and Troubleshooting
+
+⚠️ **Model and GPU Compatibility**: Model support and available arguments can vary significantly depending on:
+- The specific model architecture and requirements
+- Your GPU device capabilities (compute capability, memory, etc.)
+- vLLM version and supported features
+
+If you encounter issues when serving a model:
+1. **Check the server logs** - vLLM provides detailed error messages that indicate missing requirements or incompatible settings
+2. **Consult the official vLLM documentation** - Visit [vLLM docs](https://docs.vllm.ai/) for model-specific requirements and supported features
+3. **Review model requirements** - Some models require specific arguments or particular quantization methods
+
+### Model Management with hf-model-tool
+
+vLLM CLI uses [hf-model-tool](https://github.com/Chen-zexi/hf-model-tool) for local model discovery and management. This is another tool I developed for model management. It provides:
+- Comprehensive model scanning across HuggingFace cache and custom directories
+- Detailed model information including size, type, and quantization
+- Shared configuration between vLLM CLI and hf-model-tool
+
+**Settings are synchronized** - Any model directories configured in hf-model-tool will automatically be available in vLLM CLI, and vice versa. We encourage you to explore hf-model-tool for advanced model management capabilities. You can also launch it directly within vLLM CLI.
+
+```bash
+# Install hf-model-tool (already included with vLLM CLI)
+pip install --upgrade hf-model-tool
+
+# Scan and manage your local models
+hf-model-tool
+```
+
 ## Usage
 
 ### Interactive Mode
@@ -92,6 +122,10 @@ Launch the interactive terminal interface with menu-driven navigation for model 
 #### Custom Configuration Example
 ![Custom Configuration](asset/custom-configuration.png)
 *Advanced configuration interface with categorized vLLM options and custom arguments*
+
+### Server Monitoring
+![Server Monitoring](asset/server-monitoring.png)
+*Real-time server monitoring showing GPU utilization, server status, and streaming logs*
 
 ### Command-Line Mode
 
@@ -160,10 +194,10 @@ Four carefully selected profiles cover the most common use cases. Since vLLM onl
   "gpu_memory_utilization": 0.70,
   "enable_chunked_prefill": false,
   "trust_remote_code": true,
-  "quantization": "bitsandbytes"
+  "quantization": "fp8"
 }
 ```
-*Reduces memory usage through quantization and conservative settings*
+*Reduces memory usage through FP8 quantization and conservative settings*
 
 ### Error Handling and Log Viewing
 ![Error Handling](asset/error-handling-logs.png)
