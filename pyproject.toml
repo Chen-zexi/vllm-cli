@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vllm-cli"
-version = "0.2.0"
+version = "0.2.1"
 authors = [
     { name="Zexi Chen", email="zzxxi.chen@gmail.com" },
 ]
@@ -58,8 +58,8 @@ vllm-cli = "vllm_cli.__main__:main"
 "Bug Tracker" = "https://github.com/Chen-zexi/vllm-cli/issues"
 
 [tool.setuptools]
-packages = ["vllm_cli"]
-package-dir = {"vllm_cli" = "src/vllm_cli"}
+package-dir = {"" = "src"}
+packages.find = {where = ["src"]}
 
 [tool.black]
 line-length = 88
