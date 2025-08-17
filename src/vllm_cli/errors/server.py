@@ -5,7 +5,8 @@ Server-related exception classes.
 Defines exceptions for vLLM server operations including startup,
 communication, and lifecycle management errors.
 """
-from typing import Optional, Dict, Any
+from typing import Any, Optional
+
 from .base import VLLMCLIError
 
 

@@ -9,9 +9,9 @@ import logging
 import inquirer
 
 from ..config import ConfigManager
-from .navigation import unified_prompt
 from .common import console
 from .display import display_config
+from .navigation import unified_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ def manage_profiles() -> str:
     Manage configuration profiles.
     """
     config_manager = ConfigManager()
-    all_profiles = config_manager.get_all_profiles()
+    # all_profiles = config_manager.get_all_profiles()  # Not used directly
 
     # Show existing profiles
     console.print("\n[bold cyan]Configuration Profiles[/bold cyan]")
@@ -119,7 +119,7 @@ def create_custom_profile() -> None:
             # Don't set tensor_parallel_size for single GPU (let vLLM use default)
         else:
             console.print(
-                f"[green]Multi-GPU system: tensor parallelism recommended[/green]"
+                "[green]Multi-GPU system: tensor parallelism recommended[/green]"
             )
             tensor_parallel_input = input(
                 f"Tensor parallel size [{detected_gpus}]: "
@@ -264,9 +264,9 @@ def import_profile() -> None:
 
     config_manager = ConfigManager()
     if config_manager.import_profile(file_path, name if name else None):
-        console.print(f"[green]Profile imported successfully.[/green]")
+        console.print("[green]Profile imported successfully.[/green]")
     else:
-        console.print(f"[red]Failed to import profile.[/red]")
+        console.print("[red]Failed to import profile.[/red]")
 
     input("\nPress Enter to continue...")
 
@@ -312,6 +312,6 @@ def export_profile() -> None:
     if config_manager.export_profile(profile_name, file_path):
         console.print(f"[green]Profile exported to {file_path}[/green]")
     else:
-        console.print(f"[red]Failed to export profile.[/red]")
+        console.print("[red]Failed to export profile.[/red]")
 
     input("\nPress Enter to continue...")

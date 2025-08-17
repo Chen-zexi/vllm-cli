@@ -4,27 +4,27 @@ Server control module for vLLM CLI.
 
 Handles server configuration and startup operations.
 """
-import time
 import logging
-from typing import Dict, Any, Optional
-from rich.text import Text
-from rich.layout import Layout
-from rich.live import Live
-from rich.rule import Rule
-from rich.padding import Padding
-from rich.align import Align
+import time
+from typing import Any, Dict
 
 import inquirer
+from rich.align import Align
+from rich.layout import Layout
+from rich.live import Live
+from rich.padding import Padding
+from rich.rule import Rule
+from rich.text import Text
 
 from ..config import ConfigManager
 from ..server import VLLMServer
-from .navigation import unified_prompt
-from .log_viewer import show_log_menu
-from ..system import get_gpu_info, format_size
+from ..system import get_gpu_info
 from .common import console, create_panel
 from .display import display_config, select_profile
+from .gpu_utils import calculate_gpu_panel_size, create_gpu_status_panel
+from .log_viewer import show_log_menu
 from .model_manager import select_model
-from .components import create_gpu_status_panel, calculate_gpu_panel_size
+from .navigation import unified_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -44,10 +44,10 @@ def handle_quick_serve() -> str:
         input("\nPress Enter to continue...")
         return "continue"
 
-    # Apply dynamic defaults for display  
+    # Apply dynamic defaults for display
     profile_manager = config_manager.profile_manager
     config_with_defaults = profile_manager.apply_dynamic_defaults(last_config)
-    
+
     # Show last configuration
     console.print("\n[bold cyan]Last Configuration:[/bold cyan]")
     display_config(config_with_defaults)
@@ -95,7 +95,7 @@ def handle_serve_with_profile() -> str:
         return "continue"
 
     config = profile.get("config", {}).copy()
-    
+
     # If we have LoRA modules, update the config
     if model_config:
         config["model"] = model_config  # Pass the full dict with LoRA info
@@ -109,7 +109,7 @@ def handle_serve_with_profile() -> str:
     # Show configuration
     console.print("\n[bold cyan]Configuration:[/bold cyan]")
     display_config(config_with_defaults)
-    
+
     # Show LoRA adapters if present
     if lora_modules:
         console.print(f"\n[cyan]LoRA Adapters ({len(lora_modules)}):[/cyan]")
@@ -159,7 +159,7 @@ def handle_custom_config() -> str:
 
     # Use category-based configuration
     config = configure_by_categories({"model": model})
-    
+
     # If we have LoRA modules, update the config
     if model_config:
         config["model"] = model_config  # Pass the full dict with LoRA info
@@ -170,11 +170,11 @@ def handle_custom_config() -> str:
     config_manager = ConfigManager()
     profile_manager = config_manager.profile_manager
     config_with_defaults = profile_manager.apply_dynamic_defaults(config)
-    
+
     # Show configuration summary
     console.print("\n[bold cyan]Configuration Summary:[/bold cyan]")
     display_config(config_with_defaults)
-    
+
     # Show LoRA adapters if present
     if lora_modules:
         console.print(f"\n[cyan]LoRA Adapters ({len(lora_modules)}):[/cyan]")
@@ -216,8 +216,10 @@ def handle_custom_config() -> str:
                 "description": "Custom configuration",
                 "icon": "",
                 "config": config,  # Save original config without dynamic defaults
-                "lora_adapters": lora_modules if lora_modules else None,  # Save LoRA adapter info if present
-                "api_usage_info": config.get("api_usage_info")  # Save API usage info
+                "lora_adapters": (
+                    lora_modules if lora_modules else None
+                ),  # Save LoRA adapter info if present
+                "api_usage_info": config.get("api_usage_info"),  # Save API usage info
             }
             config_manager.save_user_profile(profile_name, profile_data)
             console.print(f"[green]Profile '{profile_name}' saved.[/green]")
@@ -271,27 +273,36 @@ def start_server_with_config(config: Dict[str, Any]) -> str:
 
     # Check if this is a remote model by checking if it exists locally
     model_config = config.get("model", "")
-    
+
     # Extract model name from LoRA config if needed
     if isinstance(model_config, dict):
         model_name = model_config.get("model", "")
     else:
         model_name = model_config
-    
+
     # Check if model exists in local cache
     from ..models import list_available_models
+
     local_models = list_available_models()
     local_model_names = [m.get("name", "") for m in local_models]
-    
+
     # A model is remote if it has "/" (HuggingFace format) and is NOT in local cache
-    is_remote_model = ("/" in model_name and 
-                       not model_name.startswith("/") and 
-                       model_name not in local_model_names)
-    
+    is_remote_model = (
+        "/" in model_name
+        and not model_name.startswith("/")
+        and model_name not in local_model_names
+    )
+
     if is_remote_model:
-        console.print(f"\n[bold cyan]Starting vLLM server with remote model:[/bold cyan] {model_name}")
-        console.print("[yellow]Note: First-time use will download the model from HuggingFace Hub.[/yellow]")
-        console.print("[dim]Download may take 10-30 minutes depending on size and connection speed.[/dim]\n")
+        console.print(
+            f"\n[bold cyan]Starting vLLM server with remote model:[/bold cyan] {model_name}"
+        )
+        console.print(
+            "[yellow]Note: First-time use will download the model from HuggingFace Hub.[/yellow]"
+        )
+        console.print(
+            "[dim]Download may take 10-30 minutes depending on size and connection speed.[/dim]\n"
+        )
     else:
         console.print("\n[bold cyan]Starting vLLM server...[/bold cyan]")
 
@@ -336,10 +347,10 @@ def start_server_with_config(config: Dict[str, Any]) -> str:
         layout["gpu"].update(create_gpu_status_panel())
 
         # Extract model name for display
-        model_display = config.get('model', 'unknown')
+        model_display = config.get("model", "unknown")
         if isinstance(model_display, dict):
-            model_display = model_display.get('model', 'unknown')
-            
+            model_display = model_display.get("model", "unknown")
+
         layout["info"].update(
             create_panel(
                 f"Port: {server.port} | Model: {model_display}",
@@ -447,7 +458,7 @@ def start_server_with_config(config: Dict[str, Any]) -> str:
                         )
 
                         # Try to detect what stage we're in from logs
-                        stage_detected = False
+                        # stage_detected = False  # Not used
                         for log in reversed(startup_logs):  # Check most recent first
                             log_lower = log.lower()
                             if (
@@ -455,15 +466,15 @@ def start_server_with_config(config: Dict[str, Any]) -> str:
                                 or "loading model" in log_lower
                             ):
                                 status_msg = f"{spinner} Loading model weights... This may take a while ({elapsed}s)"
-                                stage_detected = True
+                                # stage_detected = True  # Not needed
                                 break
                             elif "initializing" in log_lower and "engine" in log_lower:
                                 status_msg = f"{spinner} Initializing vLLM engine... ({elapsed}s)"
-                                stage_detected = True
+                                # stage_detected = True  # Not needed
                                 break
                             elif "compiling" in log_lower or "cuda graph" in log_lower:
                                 status_msg = f"{spinner} Compiling CUDA kernels and graphs... ({elapsed}s)"
-                                stage_detected = True
+                                # stage_detected = True  # Not needed
                                 break
                             elif "downloading" in log_lower or "fetching" in log_lower:
                                 # Try to extract download progress if available
@@ -471,21 +482,20 @@ def start_server_with_config(config: Dict[str, Any]) -> str:
                                 if "%" in log:
                                     # Try to extract percentage
                                     import re
-                                    match = re.search(r'(\d+(?:\.\d+)?)\s*%', log)
+
+                                    match = re.search(r"(\d+(?:\.\d+)?)\s*%", log)
                                     if match:
                                         progress_info = f" - {match.group(1)}%"
-                                
-                                status_msg = (
-                                    f"{spinner} Downloading model from HuggingFace Hub{progress_info}... ({elapsed}s)"
-                                )
-                                stage_detected = True
+
+                                status_msg = f"{spinner} Downloading model from HuggingFace Hub{progress_info}... ({elapsed}s)"
+                                # stage_detected = True  # Not needed
                                 break
                             elif (
                                 "starting server" in log_lower
                                 or "starting uvicorn" in log_lower
                             ):
                                 status_msg = f"{spinner} Starting API server... Almost ready! ({elapsed}s)"
-                                stage_detected = True
+                                # stage_detected = True  # Not needed
                                 break
 
                         layout["status"].update(
@@ -567,16 +577,10 @@ def start_server_with_config(config: Dict[str, Any]) -> str:
             )
 
             # Option to monitor - use navigation system
-            options = [
-                "Monitor server output",
-                "Return to main menu"
-            ]
+            options = ["Monitor server output", "Return to main menu"]
 
             choice = unified_prompt(
-                "post_startup", 
-                "What would you like to do?", 
-                options, 
-                allow_back=False
+                "post_startup", "What would you like to do?", options, allow_back=False
             )
 
             if choice == "Monitor server output":
@@ -590,10 +594,14 @@ def start_server_with_config(config: Dict[str, Any]) -> str:
                 for log in startup_logs[-5:]:
                     console.print(f"  {log}")
             # Offer to view logs interactively
-            console.print("\n[yellow]Server startup failed. Last logs shown above.[/yellow]")
-            
-            view_logs = input("\nWould you like to view the full logs? (y/N): ").strip().lower()
-            if view_logs in ['y', 'yes']:
+            console.print(
+                "\n[yellow]Server startup failed. Last logs shown above.[/yellow]"
+            )
+
+            view_logs = (
+                input("\nWould you like to view the full logs? (y/N): ").strip().lower()
+            )
+            if view_logs in ["y", "yes"]:
                 show_log_menu(server)
             else:
                 console.print(f"\n[dim]Full log file: {server.log_path}[/dim]")

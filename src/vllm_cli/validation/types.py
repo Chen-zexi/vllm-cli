@@ -5,9 +5,9 @@ Type-specific validator implementations.
 Provides validators for common data types including integers, floats,
 strings, booleans, and choice selections with customizable constraints.
 """
-import re
 import logging
-from typing import Any, List, Optional, Union, Pattern
+import re
+from typing import Any, List, Optional, Pattern, Union
 
 from .base import BaseValidator, ValidationResult
 
@@ -218,7 +218,7 @@ class StringValidator(BaseValidator):
         if self.pattern and not self.pattern.match(value):
             result.add_error(
                 self._create_error(
-                    value, f"does not match required pattern", "PATTERN_ERROR"
+                    value, "does not match required pattern", "PATTERN_ERROR"
                 )
             )
 
@@ -253,13 +253,13 @@ class BooleanValidator(BaseValidator):
             lower_value = value.lower().strip()
             if lower_value in ("true", "yes", "1", "on", "enabled"):
                 return result
-            elif lower_value in ("false", "no", "0", "off", "disabled"):
+            elif lower_value in ("false", "no", "0", "of", "disabled"):
                 return result
             else:
                 result.add_error(
                     self._create_error(
                         value,
-                        "must be true/false, yes/no, 1/0, or on/off",
+                        "must be true/false, yes/no, 1/0, or on/of",
                         "TYPE_ERROR",
                     )
                 )

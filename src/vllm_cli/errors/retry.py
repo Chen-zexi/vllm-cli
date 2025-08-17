@@ -5,10 +5,10 @@ Retry mechanisms and backoff strategies for vLLM CLI operations.
 Provides decorators and utilities for handling transient failures
 with exponential backoff and configurable retry policies.
 """
-import time
-import logging
 import functools
-from typing import Any, Callable, Optional, List, Type, Union
+import logging
+import time
+from typing import Callable, List, Optional, Type
 
 from .base import VLLMCLIError
 from .system import FileSystemError, NetworkError

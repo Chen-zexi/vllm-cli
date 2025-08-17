@@ -6,17 +6,17 @@ Displays comprehensive system information including GPU, memory, dependencies,
 attention backends, quantization support, and optimization recommendations.
 """
 import logging
-from rich.table import Table
+
 from rich.panel import Panel
+from rich.table import Table
 from rich.text import Text
-from rich import box
 
 from ..system import (
-    get_gpu_info,
-    get_memory_info,
     format_size,
     get_dependency_info,
     get_gpu_capabilities,
+    get_gpu_info,
+    get_memory_info,
     get_performance_recommendations,
 )
 from .common import console

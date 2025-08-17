@@ -7,18 +7,13 @@ the new validation framework.
 """
 import logging
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Tuple
-from copy import deepcopy
+from typing import Any, Dict, List, Optional, Tuple
 
-import yaml
-
-from ..validation import ValidationRegistry
-from ..validation import create_vllm_validation_registry, create_compatibility_validator
-from ..errors import ConfigurationError, ValidationError
-
+from ..errors import ConfigurationError
+from ..validation import create_compatibility_validator, create_vllm_validation_registry
+from .persistence import PersistenceManager
 from .profiles import ProfileManager
 from .schemas import SchemaManager
-from .persistence import PersistenceManager
 
 logger = logging.getLogger(__name__)
 
@@ -127,14 +122,6 @@ class ConfigManager:
         """Get user profiles."""
         return self.profile_manager.user_profiles
 
-    def import_profile(self, filepath: Path, new_name: Optional[str] = None) -> bool:
-        """Import a profile from file."""
-        return self.profile_manager.import_profile(filepath, new_name)
-
-    def export_profile(self, profile_name: str, filepath: Path) -> bool:
-        """Export a profile to file."""
-        return self.profile_manager.export_profile(profile_name, filepath)
-
     def validate_config(self, config: Dict[str, Any]) -> Tuple[bool, List[str]]:
         """
         Validate a configuration using the new validation framework.
@@ -226,13 +213,13 @@ class ConfigManager:
             lora_config = config["model"]
             base_model = lora_config.get("model", "unknown")
             args.extend(["serve", base_model])
-            
+
             # Enable LoRA support when modules are present
             args.append("--enable-lora")
-            
+
             # Track maximum rank for all LoRA modules
             max_rank = 16  # Default minimum
-            
+
             # Add LoRA modules
             for lora in lora_config.get("lora_modules", []):
                 lora_path = lora.get("path", "")
@@ -240,14 +227,14 @@ class ConfigManager:
                     # vLLM expects --lora-modules with name=path format
                     lora_name = lora.get("name", "adapter")
                     args.extend(["--lora-modules", f"{lora_name}={lora_path}"])
-                    
+
                     # Track maximum rank
                     lora_rank = lora.get("rank", 16)
                     max_rank = max(max_rank, lora_rank)
-            
+
             # Add max-lora-rank parameter
             args.extend(["--max-lora-rank", str(max_rank)])
-                    
+
         elif "model" in config:
             args.extend(["serve", config["model"]])
 
@@ -256,14 +243,14 @@ class ConfigManager:
             # Enable LoRA support
             if "--enable-lora" not in args:
                 args.append("--enable-lora")
-            
+
             # Parse and add LoRA modules
             lora_modules_str = config["lora_modules"]
             if isinstance(lora_modules_str, str):
                 # Split by space and add each module
                 for module in lora_modules_str.split():
                     args.extend(["--lora-modules", module])
-                
+
                 # Add max-lora-rank if not already added
                 # Use a safe default of 64 which should cover most LoRA adapters
                 if "--max-lora-rank" not in args:
@@ -273,7 +260,10 @@ class ConfigManager:
 
         for arg_name, value in config.items():
             # Skip special keys and None values
-            if arg_name in ["model", "name", "description", "icon", "lora_modules"] or value is None:
+            if (
+                arg_name in ["model", "name", "description", "icon", "lora_modules"]
+                or value is None
+            ):
                 continue
 
             arg_info = self.schema_manager.get_argument_info(arg_name)

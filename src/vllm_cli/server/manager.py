@@ -5,17 +5,17 @@ vLLM server manager module.
 Contains the core VLLMServer class responsible for managing individual
 vLLM server instances including configuration, lifecycle, and monitoring.
 """
-import os
-import time
-import signal
 import logging
-import subprocess
+import os
 import shlex
-from pathlib import Path
-from typing import Dict, Any, Optional, List, Union, TextIO
+import signal
+import subprocess
+import time
 from datetime import datetime
+from pathlib import Path
+from queue import Empty, Queue
 from threading import Thread
-from queue import Queue, Empty
+from typing import Any, Dict, List, Optional, TextIO, Union
 
 from ..config import ConfigManager
 
@@ -55,7 +55,7 @@ class VLLMServer:
                    port, and other vLLM-specific parameters
         """
         self.config: Dict[str, Any] = config
-        
+
         # Extract model name - handle both string and dict (LoRA config) formats
         model_config = config.get("model", "unknown")
         if isinstance(model_config, dict):
@@ -64,7 +64,7 @@ class VLLMServer:
         else:
             # Regular string model name
             self.model: str = model_config
-            
+
         self.port: int = config.get("port", 8000)
         self.process: Optional[Union[subprocess.Popen, Any]] = None
         self.log_file: Optional[TextIO] = None

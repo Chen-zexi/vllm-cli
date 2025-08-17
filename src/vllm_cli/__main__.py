@@ -4,23 +4,18 @@ vLLM CLI: Main entry point for the application
 
 Provides both CLI and interactive modes for managing vLLM servers
 """
-import sys
 import logging
-import argparse
+import sys
 from pathlib import Path
-from typing import NoReturn, Optional
+from typing import NoReturn
 
 from rich.console import Console
 from rich.panel import Panel
-from rich.text import Text
-from rich.align import Align
-from rich.columns import Columns
 
-from . import __version__
-from .ui import show_welcome_screen, show_main_menu
 from .cli import create_parser, handle_cli_command
 from .config import ConfigManager
 from .system import check_system_requirements
+from .ui import show_main_menu, show_welcome_screen
 
 # Configure logging
 logging.basicConfig(
@@ -64,7 +59,7 @@ def main() -> NoReturn:
         logger.info("Entering interactive mode")
 
         # Initialize configuration
-        config_manager = ConfigManager()
+        ConfigManager()
 
         # Show welcome screen
         show_welcome_screen()

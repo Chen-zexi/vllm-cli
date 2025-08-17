@@ -4,8 +4,8 @@ Progress bar styles for vLLM CLI.
 
 Provides different visual styles for progress bars used throughout the application.
 """
-from typing import Dict, Callable, Tuple
 from dataclasses import dataclass
+from typing import Callable, Dict
 
 
 @dataclass

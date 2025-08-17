@@ -1,0 +1,33 @@
+[flake8]
+max-line-length = 88
+extend-ignore = E203, W503
+# E203 - whitespace before ':' (conflicts with black for slicing)
+# W503 - line break before binary operator (conflicts with black)
+exclude =
+    .git,
+    __pycache__,
+    dist,
+    build,
+    *.egg-info,
+    .venv,
+    venv,
+    .tox,
+    .mypy_cache,
+    .pytest_cache,
+    .coverage
+per-file-ignores =
+    # Allow longer lines in specific files with many string literals
+    src/vllm_cli/__main__.py:E501
+    src/vllm_cli/cli/__init__.py:E501
+    src/vllm_cli/cli/handlers.py:E501
+    src/vllm_cli/cli/parser.py:E501
+    src/vllm_cli/cli/utils.py:E501
+    src/vllm_cli/config/manager.py:E501
+    src/vllm_cli/config/profiles.py:E501
+    src/vllm_cli/errors/*.py:E501
+    src/vllm_cli/models/discovery.py:E501
+    src/vllm_cli/server/manager.py:E501
+    src/vllm_cli/system/capabilities.py:E501
+    src/vllm_cli/system/gpu.py:E501
+    src/vllm_cli/ui/*.py:E501
+    src/vllm_cli/validation/schema.py:E501

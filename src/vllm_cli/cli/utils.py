@@ -7,20 +7,19 @@ argument processing, output formatting, and command coordination.
 """
 import argparse
 import logging
-import sys
 from typing import Optional
 
 from rich.console import Console
 
-from .parser import parse_args
 from .handlers import (
-    handle_serve,
+    handle_dirs,
     handle_info,
     handle_models,
+    handle_serve,
     handle_status,
     handle_stop,
-    handle_dirs,
 )
+from .parser import parse_args
 
 logger = logging.getLogger(__name__)
 console = Console()

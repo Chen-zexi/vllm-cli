@@ -7,7 +7,7 @@ result containers, and common validation patterns.
 """
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Union, Callable, Tuple
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +90,6 @@ class BaseValidator(ABC):
         Returns:
             ValidationResult containing any errors or warnings
         """
-        pass
 
     def _create_error(
         self, value: Any, message: str, code: str = "VALIDATION_ERROR"

@@ -4,10 +4,13 @@ Process management utilities for vLLM servers.
 
 Handles server registry, lifecycle management, and cleanup operations.
 """
-import logging
 import atexit
-from typing import List
+import logging
 from datetime import datetime
+from typing import TYPE_CHECKING, List
+
+if TYPE_CHECKING:
+    from .manager import VLLMServer
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +20,6 @@ _active_servers: List["VLLMServer"] = []
 
 def cleanup_servers_on_exit() -> None:
     """Clean up all active servers on program exit."""
-    global _active_servers
     if _active_servers:
         logger.info(f"Cleaning up {len(_active_servers)} active server(s) on exit")
         for server in _active_servers[
@@ -47,7 +49,6 @@ def get_active_servers() -> List["VLLMServer"]:
         List of active VLLMServer instances including both managed
         and detected external servers
     """
-    from .discovery import detect_external_servers
 
     global _active_servers
 
@@ -67,7 +68,7 @@ def add_server(server: "VLLMServer") -> None:
     Args:
         server: VLLMServer instance to add
     """
-    global _active_servers
+    global _active_servers  # noqa: F824
     if server not in _active_servers:
         _active_servers.append(server)
 
@@ -79,7 +80,7 @@ def remove_server(server: "VLLMServer") -> None:
     Args:
         server: VLLMServer instance to remove
     """
-    global _active_servers
+    global _active_servers  # noqa: F824
     if server in _active_servers:
         _active_servers.remove(server)
 
@@ -121,8 +122,6 @@ def _add_external_servers_to_registry() -> None:
     """
     from .discovery import detect_running_vllm_servers
     from .manager import VLLMServer
-
-    global _active_servers
 
     detected_servers = detect_running_vllm_servers()
     tracked_pids = {s.process.pid for s in _active_servers if s.process}

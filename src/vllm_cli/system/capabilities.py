@@ -6,7 +6,7 @@ Detects GPU architectures, compute capabilities, and available optimizations
 based on the current hardware and software environment.
 """
 import logging
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -144,8 +144,7 @@ def get_performance_recommendations() -> List[Dict[str, Any]]:
         if generation == "2" and has_hopper_blackwell:
             # Determine the specific architecture and SM version
             arch = gpu_caps[0].get("architecture", "GPU")
-            sm_version = gpu_caps[0].get("sm_version", "")
-            
+
             if arch == "Hopper":
                 arch_desc = f"{arch} architecture (sm_90)"
             elif arch == "Blackwell":
@@ -153,13 +152,13 @@ def get_performance_recommendations() -> List[Dict[str, Any]]:
                 arch_desc = f"{arch} architecture (sm_100/sm_120)"
             else:
                 arch_desc = f"{arch} architecture"
-            
+
             recommendations.append(
                 {
                     "priority": "medium",
                     "category": "attention",
                     "title": "Consider upgrading to Flash Attention 3",
-                    "description": f'Your {arch_desc} may support Flash Attention 3',
+                    "description": f"Your {arch_desc} may support Flash Attention 3",
                     "action": "See https://github.com/Dao-AILab/flash-attention for installation details",
                 }
             )

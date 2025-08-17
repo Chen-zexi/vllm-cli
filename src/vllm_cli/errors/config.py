@@ -5,8 +5,9 @@ Configuration-related exception classes.
 Defines exceptions for configuration operations including validation,
 profile management, and file operations.
 """
-from typing import Optional, Dict, Any, List
-from .base import VLLMCLIError, ValidationError
+from typing import Any, List, Optional
+
+from .base import ValidationError, VLLMCLIError
 
 
 class ConfigurationError(VLLMCLIError):

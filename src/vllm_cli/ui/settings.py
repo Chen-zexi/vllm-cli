@@ -5,19 +5,14 @@ Settings module for vLLM CLI.
 Handles configuration settings and application preferences.
 """
 import logging
+
 from rich.table import Table
-from rich.panel import Panel
 
 from ..config import ConfigManager
-from ..models import list_available_models
+from ..ui.progress_styles import get_progress_bar, list_available_styles
+from .common import console
 from .navigation import unified_prompt
-from .common import console, create_panel
 from .profiles import manage_profiles
-from ..ui.progress_styles import (
-    PROGRESS_STYLES,
-    get_progress_bar,
-    list_available_styles,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +30,9 @@ def handle_settings() -> str:
             "Clear Cache",
         ]
 
-        action = unified_prompt("settings", "Settings", settings_options, allow_back=True)
+        action = unified_prompt(
+            "settings", "Settings", settings_options, allow_back=True
+        )
 
         if action == "← Back" or action == "BACK" or not action:
             return "continue"
@@ -59,11 +56,12 @@ def handle_settings() -> str:
 def manage_model_directories() -> str:
     """
     Manage model directories using integrated hf-model-tool API.
-    
+
     This function uses the hf-model-tool API directly to provide
     a seamless directory management experience within vLLM CLI.
     """
     from .model_directories import manage_model_directories as manage_dirs
+
     return manage_dirs()
 
 
@@ -124,7 +122,7 @@ def configure_ui_preferences() -> str:
 
     styles = list_available_styles()
     for i, style_name in enumerate(styles, 1):
-        style_obj = PROGRESS_STYLES[style_name]
+        # style_obj = PROGRESS_STYLES[style_name]  # Not used in the preview
         preview_table.add_row(
             str(i),
             style_name,
@@ -205,7 +203,9 @@ def configure_ui_preferences() -> str:
 
     # Configure refresh rates
     console.print("\n[bold]Log Refresh Rate Settings[/bold]")
-    console.print("[dim]Higher refresh rates provide more responsive logs but use more CPU[/dim]")
+    console.print(
+        "[dim]Higher refresh rates provide more responsive logs but use more CPU[/dim]"
+    )
 
     # Startup refresh rate
     current_startup_rate = ui_prefs.get("startup_refresh_rate", 4.0)
@@ -223,9 +223,13 @@ def configure_ui_preferences() -> str:
                 ui_prefs["startup_refresh_rate"] = rate
                 console.print(f"[green]Startup refresh rate set to: {rate} Hz[/green]")
             else:
-                console.print("[yellow]Invalid range. Startup refresh rate unchanged.[/yellow]")
+                console.print(
+                    "[yellow]Invalid range. Startup refresh rate unchanged.[/yellow]"
+                )
         except ValueError:
-            console.print("[yellow]Invalid input. Startup refresh rate unchanged.[/yellow]")
+            console.print(
+                "[yellow]Invalid input. Startup refresh rate unchanged.[/yellow]"
+            )
 
     # Monitor refresh rate
     current_monitor_rate = ui_prefs.get("monitor_refresh_rate", 1.0)
@@ -243,9 +247,13 @@ def configure_ui_preferences() -> str:
                 ui_prefs["monitor_refresh_rate"] = rate
                 console.print(f"[green]Monitor refresh rate set to: {rate} Hz[/green]")
             else:
-                console.print("[yellow]Invalid range. Monitor refresh rate unchanged.[/yellow]")
+                console.print(
+                    "[yellow]Invalid range. Monitor refresh rate unchanged.[/yellow]"
+                )
         except ValueError:
-            console.print("[yellow]Invalid input. Monitor refresh rate unchanged.[/yellow]")
+            console.print(
+                "[yellow]Invalid input. Monitor refresh rate unchanged.[/yellow]"
+            )
 
     # Save preferences
     config_manager.save_ui_preferences(ui_prefs)

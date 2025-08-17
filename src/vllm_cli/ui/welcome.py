@@ -5,12 +5,14 @@ Welcome screen module for vLLM CLI.
 Displays ASCII art logo, system information, and features overview.
 """
 import logging
-from rich.text import Text
+
 from rich.align import Align
+from rich.text import Text
 
 from .. import __version__
 from .common import console, create_panel
-from .components import create_gpu_status_panel, create_system_overview_panel
+from .components import create_system_overview_panel
+from .gpu_utils import create_gpu_status_panel
 
 logger = logging.getLogger(__name__)
 
@@ -24,11 +26,11 @@ def show_welcome_screen() -> None:
     try:
         # ASCII art logo for vLLM CLI (with lowercase v)
         logo = """
-         ██      ██      ███    ███       ██████ ██      ██ 
-         ██      ██      ████  ████      ██      ██      ██ 
-██    ██ ██      ██      ██ ████ ██      ██      ██      ██ 
- ██  ██  ██      ██      ██  ██  ██      ██      ██      ██ 
-  ████   ███████ ███████ ██      ██       ██████ ███████ ██ 
+         ██      ██      ███    ███       ██████ ██      ██
+         ██      ██      ████  ████      ██      ██      ██
+██    ██ ██      ██      ██ ████ ██      ██      ██      ██
+ ██  ██  ██      ██      ██  ██  ██      ██      ██      ██
+  ████   ███████ ███████ ██      ██       ██████ ███████ ██
 """
 
         # Create colored logo

@@ -5,7 +5,10 @@ Server monitoring utilities.
 Provides health checking and monitoring capabilities for vLLM servers.
 """
 import logging
-from typing import Dict, Any, List
+from typing import TYPE_CHECKING, Any, Dict, List
+
+if TYPE_CHECKING:
+    from .manager import VLLMServer
 
 logger = logging.getLogger(__name__)
 

@@ -5,7 +5,8 @@ Model-related exception classes.
 Defines exceptions for model operations including loading,
 validation, and discovery errors.
 """
-from typing import Optional, Dict, Any
+from typing import Optional
+
 from .base import VLLMCLIError
 
 

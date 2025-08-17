@@ -3,19 +3,19 @@
 Enhanced category-based custom configuration for vLLM CLI with simplified numerical inputs.
 """
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, List, Optional
 
 import inquirer
 
 from ..config import ConfigManager
-from .navigation import unified_prompt
 from .common import console
+from .navigation import unified_prompt
 
 logger = logging.getLogger(__name__)
 
 
 def configure_by_categories(
-    base_config: Optional[Dict[str, Any]] = None
+    base_config: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Configure vLLM server arguments using a category-based approach.
@@ -45,7 +45,7 @@ def configure_by_categories(
 
         category_name = category_info["name"]
         category_desc = category_info["description"]
-        icon = category_info.get("icon", "")
+        # icon = category_info.get("icon", "")  # Reserved for future use
 
         # Show category header
         console.print(f"\n[bold]{category_name}[/bold]")
@@ -110,7 +110,7 @@ def configure_advanced_hierarchical(
         # Build category menu
         category_choices = []
         for cat_id, cat_info in advanced_categories:
-            icon = cat_info.get("icon", "")
+            # icon = cat_info.get("icon", "")  # Reserved for future use
             name = cat_info["name"]
 
             # Count configured arguments in this category
@@ -141,7 +141,7 @@ def configure_advanced_hierarchical(
 
         # Find the selected category
         for cat_id, cat_info in advanced_categories:
-            icon = cat_info.get("icon", "")
+            # icon = cat_info.get("icon", "")  # Reserved for future use
             name = cat_info["name"]
             if selected.startswith(name):
                 # Configure this category
@@ -172,7 +172,7 @@ def configure_category_arguments(
         Updated configuration
     """
     category_name = category_info["name"]
-    icon = category_info.get("icon", "")
+    # icon = category_info.get("icon", "")  # Reserved for future use
 
     # Get arguments for this category
     args = config_manager.get_arguments_by_category(category_id)
@@ -224,7 +224,7 @@ def configure_category_arguments(
 
         # Show argument selection
         selected = unified_prompt(
-            "arg_select", f"Select argument to configure", arg_choices, allow_back=False
+            "arg_select", "Select argument to configure", arg_choices, allow_back=False
         )
 
         if selected == "← Back to categories" or not selected:
@@ -268,7 +268,7 @@ def configure_advanced_list(
             arg_name = arg_info["name"]
             current_value = config.get(arg_name, arg_info.get("default"))
             importance = arg_info.get("importance", "low")
-            description = arg_info.get("description", "")
+            # description = arg_info.get("description", "")  # Reserved for future use
 
             # Format display string with better indicators
             if current_value is not None and arg_name in config:
@@ -299,7 +299,7 @@ def configure_advanced_list(
         arg_choices.append("← Back")
 
         selected = unified_prompt(
-            "arg_select", f"Select argument to configure", arg_choices, allow_back=False
+            "arg_select", "Select argument to configure", arg_choices, allow_back=False
         )
 
         if selected == "← Back" or not selected:
@@ -443,11 +443,11 @@ def configure_argument(
                 else:
                     # For multi-GPU, suggest using all GPUs but let user choose
                     console.print(
-                        f"[green]Multi-GPU system detected, tensor parallelism recommended[/green]"
+                        "[green]Multi-GPU system detected, tensor parallelism recommended[/green]"
                     )
                     # Set default to detected GPU count
                     default = num_gpus
-            except:
+            except Exception:
                 num_gpus = 1
 
         # Special handling for max_model_len
@@ -501,7 +501,7 @@ def configure_argument(
                 else:
                     config[arg_name] = value
             except ValueError:
-                console.print(f"[yellow]Invalid integer value, skipping[/yellow]")
+                console.print("[yellow]Invalid integer value, skipping[/yellow]")
         # If no response and user pressed Enter, don't add to config (use default)
 
     elif arg_type == "float":
@@ -550,7 +550,7 @@ def configure_argument(
                 else:
                     config[arg_name] = value
             except ValueError:
-                console.print(f"[yellow]Invalid float value, skipping[/yellow]")
+                console.print("[yellow]Invalid float value, skipping[/yellow]")
         # If no response and user pressed Enter, don't add to config (use default)
 
     elif arg_type == "string":
@@ -638,5 +638,5 @@ def create_custom_profile_interactive() -> Optional[str]:
         console.print(f"[green]Profile '{name}' saved successfully.[/green]")
         return name
     else:
-        console.print(f"[red]Failed to save profile.[/red]")
+        console.print("[red]Failed to save profile.[/red]")
         return None

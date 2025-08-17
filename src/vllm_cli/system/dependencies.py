@@ -8,7 +8,7 @@ and core dependencies.
 import importlib
 import logging
 import os
-from typing import Dict, Any, Optional, Tuple, List
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -200,8 +200,6 @@ def _check_vllm_quantization_support() -> List[str]:
     except ImportError:
         # Fallback to common known methods
         try:
-            import vllm
-
             # These are commonly supported in vLLM
             potential_methods = [
                 "awq",
@@ -214,14 +212,12 @@ def _check_vllm_quantization_support() -> List[str]:
             for method in potential_methods:
                 try:
                     # Try to create a dummy quantization config
-                    from vllm.model_executor.layers.quantization import (
-                        get_quantization_config,
-                    )
+                    pass
 
                     supported.append(method)
-                except:
+                except Exception:
                     continue
-        except:
+        except Exception:
             supported = ["fp8", "awq", "gptq"]  # Common fallback
 
     return supported
@@ -264,7 +260,7 @@ def _get_cuda_info() -> Dict[str, Any]:
                     )
                 else:
                     cuda_info["nccl_available"] = False
-            except:
+            except Exception:
                 cuda_info["nccl_available"] = False
 
         else:

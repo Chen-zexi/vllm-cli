@@ -4,9 +4,8 @@ Unified navigation system for vLLM CLI.
 
 Provides consistent menu navigation and user interaction.
 """
-import sys
 import logging
-from typing import Optional, List
+from typing import List, Optional
 
 import inquirer
 from rich.console import Console

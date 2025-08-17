@@ -4,26 +4,26 @@ Server monitoring module for vLLM CLI.
 
 Handles monitoring of running vLLM servers and displaying their status.
 """
-import time
 import logging
-from rich.text import Text
-from rich.table import Table
-from rich.layout import Layout
-from rich.live import Live
-from rich.rule import Rule
-from rich.padding import Padding
-from rich.align import Align
-from rich.console import Group
+import time
 
 import inquirer
+from rich.align import Align
+from rich.console import Group
+from rich.layout import Layout
+from rich.live import Live
+from rich.padding import Padding
+from rich.rule import Rule
+from rich.table import Table
+from rich.text import Text
 
-from ..server import VLLMServer, get_active_servers
-from .navigation import unified_prompt
-from ..system import get_gpu_info, format_size
 from ..config import ConfigManager
+from ..server import VLLMServer, get_active_servers
+from ..system import get_gpu_info
 from .common import console, create_panel
-from .components import create_gpu_status_panel, calculate_gpu_panel_size
+from .gpu_utils import calculate_gpu_panel_size, create_gpu_status_panel
 from .log_viewer import show_log_menu
+from .navigation import unified_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -182,15 +182,12 @@ def monitor_server(server: VLLMServer) -> str:
     options = [
         "Resume monitoring",
         "View server logs",
-        "Stop server", 
-        "Return to main menu"
+        "Stop server",
+        "Return to main menu",
     ]
 
     choice = unified_prompt(
-        "post_monitor",
-        "What would you like to do?",
-        options,
-        allow_back=False
+        "post_monitor", "What would you like to do?", options, allow_back=False
     )
 
     if choice == "Resume monitoring":
@@ -207,7 +204,7 @@ def monitor_server(server: VLLMServer) -> str:
     else:
         # Return to main menu
         console.print("[dim]Server will continue running.[/dim]")
-        console.print(f"[dim]You can monitor it again from the main menu.[/dim]")
+        console.print("[dim]You can monitor it again from the main menu.[/dim]")
         # Log server status for debugging
         if server.is_running():
             logger.info(

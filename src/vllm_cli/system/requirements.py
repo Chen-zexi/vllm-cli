@@ -5,13 +5,12 @@ System requirements checking utilities.
 Provides functions to check if the system meets requirements
 for running vLLM and related dependencies.
 """
-import subprocess
 import logging
-from typing import List
+import subprocess
 
+from .formatting import format_size
 from .gpu import get_gpu_info
 from .memory import get_memory_info
-from .formatting import format_size
 
 logger = logging.getLogger(__name__)
 

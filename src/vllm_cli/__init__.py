@@ -2,11 +2,10 @@
 """
 vLLM CLI Tool: A convenient CLI for serving LLMs with vLLM
 """
-import sys
 
 # Get version from package metadata (pyproject.toml)
 # Python 3.11+ has importlib.metadata built-in
-from importlib.metadata import version, PackageNotFoundError
+from importlib.metadata import PackageNotFoundError, version
 
 try:
     __version__ = version("vllm-cli")
@@ -16,9 +15,9 @@ except PackageNotFoundError:
 
 __author__ = "vLLM CLI Contributors"
 
-from .models import list_available_models, get_model_details
-from .server import VLLMServer
 from .config import ConfigManager
+from .models import get_model_details, list_available_models
+from .server import VLLMServer
 
 __all__ = [
     "__version__",

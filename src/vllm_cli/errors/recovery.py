@@ -6,12 +6,12 @@ Provides automated recovery mechanisms for transient failures
 and graceful degradation for persistent issues.
 """
 import logging
-from typing import Dict, Any, List, Optional, Callable
+from typing import Any, Dict, List, Optional
 
-from .system import GPUError, GPUNotFoundError, GPUMemoryError
-from .model import ModelError, ModelNotFoundError
-from .server import ServerError, PortInUseError, ServerStartupError
 from .config import ConfigurationError
+from .model import ModelError, ModelNotFoundError
+from .server import PortInUseError, ServerError, ServerStartupError
+from .system import GPUError, GPUMemoryError, GPUNotFoundError
 
 logger = logging.getLogger(__name__)
 

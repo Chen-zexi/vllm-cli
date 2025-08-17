@@ -5,15 +5,15 @@ Model management module for vLLM CLI.
 Handles model selection and delegates management to hf-model-tool.
 """
 import logging
-from typing import Optional, Dict, Any, List
-from rich.table import Table
+from typing import Any, Dict, Optional
+
 import inquirer
+from rich.panel import Panel
 
 from ..models import list_available_models
-from .navigation import unified_prompt
 from ..system import format_size
-from .common import console, create_panel
-from rich.panel import Panel
+from .common import console
+from .navigation import unified_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -21,53 +21,65 @@ logger = logging.getLogger(__name__)
 def enter_remote_model() -> Optional[str]:
     """
     Allow user to enter a HuggingFace model ID for remote serving.
-    
+
     Returns:
         Model ID string or None if cancelled
     """
     console.print("\n[bold cyan]Remote Model Selection[/bold cyan]")
     console.print("\nEnter a HuggingFace model ID to serve directly from the Hub.")
     console.print("The model will be automatically downloaded on first use.\n")
-    
+
     console.print("[dim]Examples:[/dim]")
     console.print("  • openai/gpt-oss-120b\n")
-    
-    console.print("[yellow]Note:[/yellow] First-time download may take 10-30 minutes depending on model size.\n")
-    
+
+    console.print(
+        "[yellow]Note:[/yellow] First-time download may take 10-30 minutes depending on model size.\n"
+    )
+
     while True:
         console.print("[cyan]Model ID (or 'back' to cancel):[/cyan] ", end="")
         model_id = input().strip()
-        
-        if model_id.lower() in ['back', 'cancel', '']:
+
+        if model_id.lower() in ["back", "cancel", ""]:
             return None
-        
+
         # Validate model ID format
-        if '/' not in model_id:
-            console.print("[red]Invalid format. Model ID should be 'organization/model-name'[/red]")
+        if "/" not in model_id:
+            console.print(
+                "[red]Invalid format. Model ID should be 'organization/model-name'[/red]"
+            )
             continue
-            
-        parts = model_id.split('/')
+
+        parts = model_id.split("/")
         if len(parts) != 2:
-            console.print("[red]Invalid format. Model ID should be 'organization/model-name'[/red]")
+            console.print(
+                "[red]Invalid format. Model ID should be 'organization/model-name'[/red]"
+            )
             continue
-            
+
         org, model_name = parts
         if not org or not model_name:
-            console.print("[red]Invalid model ID. Both organization and model name are required.[/red]")
+            console.print(
+                "[red]Invalid model ID. Both organization and model name are required.[/red]"
+            )
             continue
-        
+
         # Confirm the selection
         console.print(f"\n[bold]Selected model:[/bold] {model_id}")
-        console.print("\n[yellow]Warning:[/yellow] This model will be downloaded from HuggingFace Hub.")
-        console.print("Download size can range from a few GB to 100+ GB depending on the model.\n")
-        
+        console.print(
+            "\n[yellow]Warning:[/yellow] This model will be downloaded from HuggingFace Hub."
+        )
+        console.print(
+            "Download size can range from a few GB to 100+ GB depending on the model.\n"
+        )
+
         console.print("[cyan]Proceed with this model? (Y/n):[/cyan] ", end="")
         confirm = input().strip().lower()
-        
-        if confirm in ['', 'y', 'yes']:
+
+        if confirm in ["", "y", "yes"]:
             logger.info(f"User selected remote model: {model_id}")
             return model_id
-        elif confirm in ['n', 'no']:
+        elif confirm in ["n", "no"]:
             console.print("[yellow]Model selection cancelled.[/yellow]")
             continue
         else:
@@ -87,25 +99,25 @@ def select_model() -> Optional[Any]:
         model_source_choices = [
             "Select from local models",
             "Serve model with LoRA adapters",
-            "Use a model from HuggingFace Hub (auto-download)"
+            "Use a model from HuggingFace Hub (auto-download)",
         ]
-        
+
         source_choice = unified_prompt(
             "model_source",
             "How would you like to select a model?",
             model_source_choices,
-            allow_back=True
+            allow_back=True,
         )
-        
+
         if not source_choice or source_choice == "BACK":
             return None
-        
+
         if source_choice == "Use a model from HuggingFace Hub (auto-download)":
             return enter_remote_model()
-        
+
         if source_choice == "Serve model with LoRA adapters":
             return select_model_with_lora()
-        
+
         # Continue with local model selection
         console.print("\n[bold cyan]Fetching available models...[/bold cyan]")
         models = list_available_models()
@@ -167,7 +179,7 @@ def select_model() -> Optional[Any]:
             # Show only the model name without provider if it's already in the name
             display_name = model["name"]
             if display_name.startswith(f"{provider_name}/"):
-                display_name = display_name[len(provider_name) + 1 :]
+                display_name = display_name[len(provider_name) + 1 :]  # noqa: E203
             model_choices.append(f"{display_name} ({size_str})")
 
         # Show model selection for the provider
@@ -189,7 +201,7 @@ def select_model() -> Optional[Any]:
         for model in provider_models:
             check_name = model["name"]
             if check_name.startswith(f"{provider_name}/"):
-                check_name = check_name[len(provider_name) + 1 :]
+                check_name = check_name[len(provider_name) + 1 :]  # noqa: E203
             if check_name == model_display_name or model["name"] == model_display_name:
                 return model["name"]
 
@@ -207,9 +219,9 @@ def handle_model_management() -> str:
     Handle model management operations by delegating to hf-model-tool.
     All model management is handled by hf-model-tool for consistency.
     """
-    import subprocess
     import os
-    
+    import subprocess
+
     while True:  # Loop to stay in model management menu
         # Simplified menu - delegate everything to hf-model-tool
         management_options = [
@@ -218,24 +230,23 @@ def handle_model_management() -> str:
             "Manage Assets",  # hf-model-tool --manage
             "View Model Details",  # hf-model-tool --details
         ]
-        
+
         action = unified_prompt(
-            "model_management",
-            "Model Management",
-            management_options,
-            allow_back=True
+            "model_management", "Model Management", management_options, allow_back=True
         )
-        
+
         if not action or action == "BACK":
             return "continue"  # Return to main menu
-        
+
         if action == "Open Model Management Tool":
             # Launch full hf-model-tool interface
-            console.print(Panel(
-                "[bold cyan]Launching HF-Model-Tool[/bold cyan]\n"
-                "[dim]Full model management interface[/dim]",
-                border_style="blue"
-            ))
+            console.print(
+                Panel(
+                    "[bold cyan]Launching HF-Model-Tool[/bold cyan]\n"
+                    "[dim]Full model management interface[/dim]",
+                    border_style="blue",
+                )
+            )
             try:
                 subprocess.run(["hf-model-tool"], env=os.environ.copy())
             except FileNotFoundError:
@@ -245,14 +256,16 @@ def handle_model_management() -> str:
                 console.print(f"[red]Error launching hf-model-tool: {e}[/red]")
             input("\nPress Enter to continue...")
             # Continue loop - stay in model management menu
-            
+
         elif action == "List All Models":
             # Launch hf-model-tool in list mode
-            console.print(Panel(
-                "[bold cyan]Model List[/bold cyan]\n"
-                "[dim]Displaying all discovered models[/dim]",
-                border_style="blue"
-            ))
+            console.print(
+                Panel(
+                    "[bold cyan]Model List[/bold cyan]\n"
+                    "[dim]Displaying all discovered models[/dim]",
+                    border_style="blue",
+                )
+            )
             try:
                 subprocess.run(["hf-model-tool", "--list"], env=os.environ.copy())
             except FileNotFoundError:
@@ -262,14 +275,16 @@ def handle_model_management() -> str:
                 console.print(f"[red]Error: {e}[/red]")
             input("\nPress Enter to continue...")
             # Continue loop - stay in model management menu
-            
+
         elif action == "Manage Assets":
             # Launch hf-model-tool in manage mode
-            console.print(Panel(
-                "[bold cyan]Asset Management[/bold cyan]\n"
-                "[dim]Delete, deduplicate, and organize models[/dim]",
-                border_style="blue"
-            ))
+            console.print(
+                Panel(
+                    "[bold cyan]Asset Management[/bold cyan]\n"
+                    "[dim]Delete, deduplicate, and organize models[/dim]",
+                    border_style="blue",
+                )
+            )
             try:
                 subprocess.run(["hf-model-tool", "--manage"], env=os.environ.copy())
             except FileNotFoundError:
@@ -279,14 +294,16 @@ def handle_model_management() -> str:
                 console.print(f"[red]Error: {e}[/red]")
             input("\nPress Enter to continue...")
             # Continue loop - stay in model management menu
-            
+
         elif action == "View Model Details":
             # Launch hf-model-tool in details mode
-            console.print(Panel(
-                "[bold cyan]Model Details[/bold cyan]\n"
-                "[dim]View detailed information about models[/dim]",
-                border_style="blue"
-            ))
+            console.print(
+                Panel(
+                    "[bold cyan]Model Details[/bold cyan]\n"
+                    "[dim]View detailed information about models[/dim]",
+                    border_style="blue",
+                )
+            )
             try:
                 subprocess.run(["hf-model-tool", "--details"], env=os.environ.copy())
             except FileNotFoundError:
@@ -301,19 +318,22 @@ def handle_model_management() -> str:
 def select_model_with_lora() -> Optional[Dict[str, Any]]:
     """
     Select a base model and LoRA adapters to serve together.
-    
+
     Returns:
         Dictionary with model and LoRA configuration for serving
     """
     console.print("\n[bold cyan]Model + LoRA Selection[/bold cyan]")
-    console.print("[dim]Select a base model and LoRA adapters to serve together[/dim]\n")
-    
+    console.print(
+        "[dim]Select a base model and LoRA adapters to serve together[/dim]\n"
+    )
+
     # First scan for LoRA adapters to determine which models have adapters
     console.print("[cyan]Scanning for LoRA adapters...[/cyan]")
     try:
         from ..models.discovery import scan_for_lora_adapters
+
         lora_adapters = scan_for_lora_adapters()
-        
+
         if not lora_adapters:
             console.print("[yellow]No LoRA adapters found.[/yellow]")
             console.print("\nLoRA adapters should be placed in directories with:")
@@ -322,123 +342,136 @@ def select_model_with_lora() -> Optional[Dict[str, Any]]:
             console.print("\nYou can manage LoRA adapters using hf-model-tool")
             input("\nPress Enter to continue...")
             return None
-        
+
         console.print(f"[green]Found {len(lora_adapters)} LoRA adapter(s)[/green]\n")
-        
+
         # Extract base models from LoRA metadata
         base_models_with_lora = set()
         lora_by_base = {}
-        
+
         for lora in lora_adapters:
             # First try metadata which should have the exact base model
             metadata = lora.get("metadata", {})
             base_model = metadata.get("base_model", "")
-            
+
             # If not in metadata, try config
             if not base_model:
                 config = lora.get("config", {})
                 if isinstance(config, dict):
                     base_model = config.get("base_model_name_or_path", "")
-            
+
             # Store the mapping if we found a base model
             if base_model:
                 base_models_with_lora.add(base_model)
                 if base_model not in lora_by_base:
                     lora_by_base[base_model] = []
                 lora_by_base[base_model].append(lora)
-        
-        logger.debug(f"Found LoRA adapters for these base models: {base_models_with_lora}")
-        
+
+        logger.debug(
+            f"Found LoRA adapters for these base models: {base_models_with_lora}"
+        )
+
         # Get all available models
         models = list_available_models()
-        
+
         if not models:
             console.print("[yellow]No local models found.[/yellow]")
             console.print("Please download models first using hf-model-tool")
             input("\nPress Enter to continue...")
             return None
-        
+
         # Filter models to only show those with LoRA adapters
         models_with_lora = []
         for model in models:
             model_name = model["name"]
             # Check if this model has LoRA adapters
             has_lora = False
-            
+
             # First try exact match
             if model_name in base_models_with_lora:
                 has_lora = True
-            
+
             # If no exact match, don't do fuzzy matching to avoid false positives
             # Only show models that have exact LoRA matches
-            
+
             if has_lora:
                 models_with_lora.append(model)
-        
+
         # If no models with LoRA found, show all and let user know
         if not models_with_lora:
-            console.print("[yellow]No models found with matching LoRA adapters.[/yellow]")
-            console.print("Showing all models. LoRA compatibility will be checked after selection.\n")
+            console.print(
+                "[yellow]No models found with matching LoRA adapters.[/yellow]"
+            )
+            console.print(
+                "Showing all models. LoRA compatibility will be checked after selection.\n"
+            )
             models_with_lora = models
-        
+
         # Select the base model
         console.print("[cyan]Step 1: Select Base Model[/cyan]")
-        console.print(f"[dim]Showing {len(models_with_lora)} model(s) with LoRA adapters[/dim]\n")
-        
+        console.print(
+            f"[dim]Showing {len(models_with_lora)} model(s) with LoRA adapters[/dim]\n"
+        )
+
         model_choices = []
         for model in models_with_lora:
             size_str = format_size(model.get("size", 0))
             # Check how many LoRAs this model has
             model_name = model["name"]
             lora_count = 0
-            
+
             # Use exact matching for counting
             if model_name in lora_by_base:
                 lora_count = len(lora_by_base[model_name])
-            
+
             if lora_count > 0:
-                model_choices.append(f"{model_name} ({size_str}) [{lora_count} LoRA(s)]")
+                model_choices.append(
+                    f"{model_name} ({size_str}) [{lora_count} LoRA(s)]"
+                )
             else:
                 model_choices.append(f"{model_name} ({size_str})")
-        
+
         selected_model = unified_prompt(
-            "base_model",
-            f"Select Base Model",
-            model_choices,
-            allow_back=True
+            "base_model", "Select Base Model", model_choices, allow_back=True
         )
-        
+
         if not selected_model or selected_model == "BACK":
             return None
-        
+
         # Extract model name
         base_model_name = selected_model.split(" (")[0]
-        
+
         # Now select LoRA adapters for this model
-        console.print(f"\n[cyan]Step 2: Select LoRA Adapters[/cyan]")
+        console.print("\n[cyan]Step 2: Select LoRA Adapters[/cyan]")
         console.print(f"[dim]Base model: {base_model_name}[/dim]\n")
-    
+
         # Filter compatible LoRAs for the selected model
         compatible_loras = []
         incompatible_loras = []
-        
+
         for lora in lora_adapters:
             metadata = lora.get("metadata", {})
             lora_base = metadata.get("base_model", "unknown")
-            
+
             # Simple compatibility check
-            if lora_base == "unknown" or lora_base in base_model_name or base_model_name in lora_base:
+            if (
+                lora_base == "unknown"
+                or lora_base in base_model_name
+                or base_model_name in lora_base
+            ):
                 compatible_loras.append(lora)
             else:
                 incompatible_loras.append(lora)
-        
+
         if not compatible_loras and incompatible_loras:
-            console.print("[yellow]No clearly compatible LoRA adapters found for this model.[/yellow]")
+            console.print(
+                "[yellow]No clearly compatible LoRA adapters found for this model.[/yellow]"
+            )
             if inquirer.confirm("Show all LoRA adapters anyway?", default=True):
                 compatible_loras = incompatible_loras
             else:
                 return base_model_name
-        
+
         # Create LoRA choices
         lora_choices = []
         for lora in compatible_loras:
@@ -447,24 +480,24 @@ def select_model_with_lora() -> Optional[Dict[str, Any]]:
             size = lora.get("size", 0)
             size_str = f"{size / (1024**2):.1f}MB" if size > 0 else "N/A"
             lora_choices.append(f"{name} (rank={rank}, {size_str})")
-        
+
         # Allow multiple LoRA selection
-        console.print("[dim]You can select multiple LoRA adapters (space to select, enter to confirm)[/dim]")
-        
+        console.print(
+            "[dim]You can select multiple LoRA adapters (space to select, enter to confirm)[/dim]"
+        )
+
         questions = [
             inquirer.Checkbox(
-                "loras",
-                message="Select LoRA adapters",
-                choices=lora_choices
+                "loras", message="Select LoRA adapters", choices=lora_choices
             )
         ]
-        
+
         answers = inquirer.prompt(questions)
         if not answers or not answers["loras"]:
             if inquirer.confirm("Continue without LoRA adapters?", default=False):
                 return base_model_name
             return None
-        
+
         # Build the configuration
         selected_lora_configs = []
         for lora_choice in answers["loras"]:
@@ -472,23 +505,22 @@ def select_model_with_lora() -> Optional[Dict[str, Any]]:
             for lora in compatible_loras:
                 name = lora.get("name", lora.get("display_name", "Unknown"))
                 if name in lora_choice:
-                    selected_lora_configs.append({
-                        "name": name,
-                        "path": lora.get("path", ""),
-                        "rank": lora.get("rank", 16)
-                    })
+                    selected_lora_configs.append(
+                        {
+                            "name": name,
+                            "path": lora.get("path", ""),
+                            "rank": lora.get("rank", 16),
+                        }
+                    )
                     break
-        
+
         # Return configuration for serving
-        return {
-            "model": base_model_name,
-            "lora_modules": selected_lora_configs
-        }
-        
+        return {"model": base_model_name, "lora_modules": selected_lora_configs}
+
     except Exception as e:
         console.print(f"[red]Error selecting LoRA adapters: {e}[/red]")
         logger.error(f"LoRA selection error: {e}")
-        
+
         if inquirer.confirm("Continue with base model only?", default=True):
             return base_model_name
         return None

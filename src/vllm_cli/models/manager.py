@@ -5,12 +5,11 @@ Model management module for vLLM CLI.
 Integrates with hf-model-tool to list and manage downloaded models
 with caching for performance optimization.
 """
-import time
 import logging
-from typing import List, Dict, Any, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
-from .discovery import scan_for_models, build_model_dict
 from .cache import ModelCache
+from .discovery import build_model_dict, scan_for_models
 
 logger = logging.getLogger(__name__)
 

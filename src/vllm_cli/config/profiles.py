@@ -7,9 +7,9 @@ import/export, and persistence.
 """
 import json
 import logging
-from pathlib import Path
-from typing import Dict, Any, Optional, Callable, List
 from copy import deepcopy
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional
 
 from ..errors import ProfileError
 from ..system.gpu import get_gpu_info
@@ -107,11 +107,11 @@ class ProfileManager:
                     profile_name=name,
                     error_code="INVALID_PROFILE_TYPE",
                 )
-            
+
             # Process LoRA configuration if present
             if "config" in profile:
                 config = profile["config"]
-                
+
                 # Handle LoRA adapters in config
                 if "lora_adapters" in config:
                     # Validate LoRA adapter entries
@@ -123,8 +123,10 @@ class ProfileManager:
                                 continue
                             if "path" not in adapter and "name" in adapter:
                                 # Try to resolve adapter by name
-                                adapter["path"] = self._resolve_lora_path(adapter["name"])
-                    
+                                adapter["path"] = self._resolve_lora_path(
+                                    adapter["name"]
+                                )
+
                     # Convert to lora_modules format for vLLM
                     if lora_adapters:
                         config["enable_lora"] = True
@@ -160,22 +162,26 @@ class ProfileManager:
                 profile_name=name,
                 error_code="PROFILE_SAVE_ERROR",
             ) from e
-    
+
     def _resolve_lora_path(self, adapter_name: str) -> str:
         """
         Try to resolve a LoRA adapter path by name.
-        
+
         Args:
             adapter_name: Name of the LoRA adapter
-        
+
         Returns:
             Path to the adapter if found, empty string otherwise
         """
         try:
             from ..models import scan_for_lora_adapters
+
             adapters = scan_for_lora_adapters()
             for adapter in adapters:
-                if adapter.get("name") == adapter_name or adapter.get("display_name") == adapter_name:
+                if (
+                    adapter.get("name") == adapter_name
+                    or adapter.get("display_name") == adapter_name
+                ):
                     return adapter.get("path", "")
         except Exception as e:
             logger.debug(f"Could not resolve LoRA path for {adapter_name}: {e}")

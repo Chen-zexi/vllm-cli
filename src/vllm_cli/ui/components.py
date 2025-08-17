@@ -7,22 +7,17 @@ non-GPU specific UI elements. GPU-related components have been moved
 to gpu_utils.py to eliminate code duplication.
 """
 import logging
-from typing import Optional, Dict, Any, List
+from typing import Any, Dict, Optional
+
+from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
-from rich.panel import Panel
 
-from ..system import get_gpu_info, get_memory_info, format_size, get_cuda_version
-from ..config import ConfigManager
-from .common import create_panel, console
+from ..system import format_size, get_cuda_version, get_gpu_info, get_memory_info
+from .common import create_panel
 
-# Import GPU utilities from centralized module
-from .gpu_utils import (
-    calculate_gpu_panel_size,
-    create_gpu_status_panel,
-    create_gpu_summary_line,
-    create_compact_gpu_panel,
-)
+# Import the GPU utility we actually use
+from .gpu_utils import create_gpu_summary_line
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +75,7 @@ def create_system_overview_panel() -> Optional[Panel]:
 
 
 def create_status_summary_panel(
-    additional_info: Optional[Dict[str, Any]] = None
+    additional_info: Optional[Dict[str, Any]] = None,
 ) -> Panel:
     """
     Create a status summary panel for dashboard views.

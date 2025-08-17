@@ -5,30 +5,28 @@ Command handlers for vLLM CLI commands.
 Implements the actual logic for each CLI command including
 serve, info, models, status, and stop operations.
 """
-import json
-import logging
 import argparse
-from typing import Dict, Any, Optional
+import logging
+from typing import Any, Dict
 
 from rich.console import Console
-from rich.table import Table
 from rich.panel import Panel
+from rich.table import Table
 
+from ..config import ConfigManager
+from ..models import list_available_models
 from ..server import (
     VLLMServer,
+    find_server_by_model,
+    find_server_by_port,
     get_active_servers,
     stop_all_servers,
-    find_server_by_port,
-    find_server_by_model,
 )
-from ..config import ConfigManager
-from ..models import list_available_models, search_models
 from ..system import (
-    get_gpu_info,
-    get_memory_info,
-    format_size,
     check_vllm_installation,
+    format_size,
     get_cuda_version,
+    get_memory_info,
 )
 from ..ui.gpu_utils import create_gpu_status_panel
 
@@ -85,13 +83,17 @@ def handle_serve(args: argparse.Namespace) -> bool:
 
         # Check if this is a remote model
         is_remote_model = "/" in args.model and not args.model.startswith("/")
-        
+
         if is_remote_model:
-            console.print(f"[blue]Starting vLLM server for remote model: {args.model}[/blue]")
-            console.print("[yellow]Note: Model will be downloaded from HuggingFace Hub if not cached[/yellow]")
+            console.print(
+                f"[blue]Starting vLLM server for remote model: {args.model}[/blue]"
+            )
+            console.print(
+                "[yellow]Note: Model will be downloaded from HuggingFace Hub if not cached[/yellow]"
+            )
         else:
             console.print(f"[blue]Starting vLLM server for model: {args.model}[/blue]")
-        
+
         console.print(f"Port: {config.get('port', 8000)}")
         console.print(f"Host: {config.get('host', 'localhost')}")
 
@@ -146,7 +148,7 @@ def handle_info() -> bool:
 
         # Software Information
         cuda_version = get_cuda_version()
-        software_info = f"vLLM CLI: 0.1.0\n"
+        software_info = "vLLM CLI: 0.1.0\n"
 
         try:
             import torch
@@ -403,12 +405,12 @@ def _build_serve_config(
         config["max_model_len"] = args.max_model_len
     if args.dtype != "auto":
         config["dtype"] = args.dtype
-    
+
     # Handle LoRA adapters
     if hasattr(args, "lora") and args.lora:
         # Enable LoRA if adapters are specified
         config["enable_lora"] = True
-        
+
         # Format LoRA modules for vLLM
         lora_modules = []
         for lora_spec in args.lora:
@@ -418,20 +420,21 @@ def _build_serve_config(
             else:
                 # Just path, generate a name from the path
                 from pathlib import Path
+
                 lora_path = Path(lora_spec)
                 lora_name = lora_path.name.replace("-", "_").replace(" ", "_")
                 lora_modules.append(f"{lora_name}={lora_spec}")
-        
+
         # Join modules for command line
         config["lora_modules"] = " ".join(lora_modules)
-        
+
         console.print(f"[blue]Enabling LoRA with {len(lora_modules)} adapter(s)[/blue]")
         for module in lora_modules:
             console.print(f"  • {module}")
-    
+
     elif hasattr(args, "enable_lora") and args.enable_lora:
         config["enable_lora"] = True
-    
+
     if args.extra_args:
         config["extra_args"] = args.extra_args
 
@@ -442,40 +445,51 @@ def handle_dirs(args: argparse.Namespace) -> bool:
     """
     Directory management is now handled by hf-model-tool.
     This command redirects users to use hf-model-tool.
-    
+
     Args:
         args: Parsed command line arguments
-    
+
     Returns:
         True if operation succeeded, False otherwise
     """
-    import subprocess
     import os
-    
+    import subprocess
+
     console.print("[yellow]Directory management has moved to hf-model-tool[/yellow]")
     console.print("\nYou can manage directories using:")
-    console.print("  • [cyan]hf-model-tool[/cyan] - Interactive interface with Config menu")
-    console.print("  • [cyan]hf-model-tool --add-path <path>[/cyan] - Add a directory directly")
-    
-    if hasattr(args, 'dirs_command'):
+    console.print(
+        "  • [cyan]hf-model-tool[/cyan] - Interactive interface with Config menu"
+    )
+    console.print(
+        "  • [cyan]hf-model-tool --add-path <path>[/cyan] - Add a directory directly"
+    )
+
+    if hasattr(args, "dirs_command"):
         if args.dirs_command in ["add", "remove", "list"]:
-            console.print(f"\n[dim]Launching hf-model-tool for directory management...[/dim]")
-            
+            console.print(
+                "\n[dim]Launching hf-model-tool for directory management...[/dim]"
+            )
+
             try:
-                # Launch hf-model-tool 
-                if args.dirs_command == "add" and hasattr(args, 'path'):
+                # Launch hf-model-tool
+                if args.dirs_command == "add" and hasattr(args, "path"):
                     # If adding a path, use the --add-path argument
-                    subprocess.run(["hf-model-tool", "--add-path", args.path], env=os.environ.copy())
+                    subprocess.run(
+                        ["hf-model-tool", "--add-path", args.path],
+                        env=os.environ.copy(),
+                    )
                 else:
                     # Otherwise launch interactive mode
                     subprocess.run(["hf-model-tool"], env=os.environ.copy())
                 return True
             except FileNotFoundError:
-                console.print("\n[red]hf-model-tool not found. Please install it:[/red]")
+                console.print(
+                    "\n[red]hf-model-tool not found. Please install it:[/red]"
+                )
                 console.print("  pip install hf-model-tool")
                 return False
             except Exception as e:
                 console.print(f"\n[red]Error launching hf-model-tool: {e}[/red]")
                 return False
-    
+
     return True

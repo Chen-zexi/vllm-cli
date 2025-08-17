@@ -114,14 +114,14 @@ def _add_serve_parser(subparsers) -> None:
         default="auto",
         help="Model data type (default: auto)",
     )
-    
+
     # LoRA adapter options
     serve_parser.add_argument(
         "--lora",
         action="append",
         help="LoRA adapter to load (can specify multiple times). Format: name=path or just path",
     )
-    
+
     serve_parser.add_argument(
         "--enable-lora",
         action="store_true",
@@ -223,49 +223,43 @@ def _add_dirs_parser(subparsers) -> None:
     dirs_parser = subparsers.add_parser(
         "dirs",
         help="Manage model directories",
-        description="Manage directories for model and LoRA adapter scanning"
+        description="Manage directories for model and LoRA adapter scanning",
     )
-    
+
     # Create subcommands for directory operations
     dirs_subparsers = dirs_parser.add_subparsers(
         dest="dirs_command",
         help="Directory management commands",
-        metavar="{add,remove,list}"
+        metavar="{add,remove,list}",
     )
-    
+
     # Add directory
     add_parser = dirs_subparsers.add_parser(
         "add",
         help="Add a directory for model/LoRA scanning",
-        description="Add a new directory to scan for models and LoRA adapters"
+        description="Add a new directory to scan for models and LoRA adapters",
     )
-    add_parser.add_argument(
-        "path",
-        help="Path to directory to add"
-    )
+    add_parser.add_argument("path", help="Path to directory to add")
     add_parser.add_argument(
         "--type",
         choices=["huggingface", "custom", "lora", "auto"],
         default="auto",
-        help="Type of directory (default: auto-detect)"
+        help="Type of directory (default: auto-detect)",
     )
-    
+
     # Remove directory
     remove_parser = dirs_subparsers.add_parser(
         "remove",
         help="Remove a directory from scanning",
-        description="Remove a directory from model/LoRA scanning"
+        description="Remove a directory from model/LoRA scanning",
     )
-    remove_parser.add_argument(
-        "path",
-        help="Path to directory to remove"
-    )
-    
+    remove_parser.add_argument("path", help="Path to directory to remove")
+
     # List directories
     dirs_subparsers.add_parser(
         "list",
         help="List all configured directories",
-        description="Show all directories configured for model/LoRA scanning"
+        description="Show all directories configured for model/LoRA scanning",
     )
 
 
