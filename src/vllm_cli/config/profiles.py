@@ -301,6 +301,49 @@ class ProfileManager:
         """Check if a profile is a user-created profile."""
         return name in self.user_profiles
 
+    def has_user_override(self, name: str) -> bool:
+        """
+        Check if a built-in profile has been overridden by a user profile.
+
+        Args:
+            name: Profile name to check
+
+        Returns:
+            True if this is a built-in profile that has a user override
+        """
+        return name in self.default_profiles and name in self.user_profiles
+
+    def get_original_default_profile(self, name: str) -> Optional[Dict[str, Any]]:
+        """
+        Get the original default profile without any user overrides.
+
+        Args:
+            name: Profile name
+
+        Returns:
+            Original default profile if it exists, None otherwise
+        """
+        if name in self.default_profiles:
+            return deepcopy(self.default_profiles[name])
+        return None
+
+    def reset_to_default(self, name: str) -> bool:
+        """
+        Reset a customized built-in profile to its default settings.
+
+        This removes the user override for a built-in profile.
+
+        Args:
+            name: Profile name to reset
+
+        Returns:
+            True if reset successfully, False otherwise
+        """
+        # Only reset if this is a built-in profile with a user override
+        if self.has_user_override(name):
+            return self.delete_user_profile(name)
+        return False
+
     def get_profile_count(self) -> Dict[str, int]:
         """Get count of profiles by type."""
         return {

@@ -38,7 +38,7 @@
         "gpu_memory_utilization": 0.70,
         "enable_chunked_prefill": false,
         "trust_remote_code": true,
-        "quantization": "bitsandbytes"
+        "quantization": "fp8"
       }
     }
   }
