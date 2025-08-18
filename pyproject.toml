@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vllm-cli"
-version = "0.2.2"
+version = "0.2.3rc1"
 authors = [
     { name="Zexi Chen", email="zzxxi.chen@gmail.com" },
 ]
@@ -60,6 +60,9 @@ vllm-cli = "vllm_cli.__main__:main"
 [tool.setuptools]
 package-dir = {"" = "src"}
 packages.find = {where = ["src"]}
+
+[tool.setuptools.package-data]
+vllm_cli = ["schemas/*.json"]
 
 [tool.black]
 line-length = 88
