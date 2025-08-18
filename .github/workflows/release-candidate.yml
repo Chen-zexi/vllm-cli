@@ -87,6 +87,9 @@ jobs:
     name: Publish RC to TestPyPI
     needs: build-and-test-rc
     runs-on: ubuntu-latest
+    permissions:
+      # IMPORTANT: Required for trusted publishing to TestPyPI
+      id-token: write
 
     steps:
     - name: Download RC packages
