@@ -5,9 +5,9 @@ GPU information and detection utilities.
 Provides functions for detecting and gathering information about
 available GPUs using multiple methods (nvidia-smi, PyTorch fallback).
 """
-import subprocess
 import logging
-from typing import Dict, Any, List, Optional
+import subprocess
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 

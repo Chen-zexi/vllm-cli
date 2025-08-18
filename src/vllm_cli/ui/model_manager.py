@@ -208,13 +208,17 @@ def select_model() -> Optional[Any]:
         # Group models by provider
         providers_dict = {}
         for model in models:
-            provider = model.get("publisher", "unknown")
-            if provider == "unknown" or not provider:
-                # Try to extract provider from model name
-                if "/" in model["name"]:
-                    provider = model["name"].split("/")[0]
-                else:
-                    provider = "local"
+            # Special handling for Ollama models
+            if model.get("type") == "ollama_model":
+                provider = "ollama"
+            else:
+                provider = model.get("publisher", "unknown")
+                if provider == "unknown" or not provider:
+                    # Try to extract provider from model name
+                    if "/" in model["name"]:
+                        provider = model["name"].split("/")[0]
+                    else:
+                        provider = "local"
 
             if provider not in providers_dict:
                 providers_dict[provider] = []
@@ -308,6 +312,42 @@ def select_model() -> Optional[Any]:
             if check_name.startswith(f"{provider_name}/"):
                 check_name = check_name[len(provider_name) + 1 :]  # noqa: E203
             if check_name == model_display_name or model["name"] == model_display_name:
+                # Special handling for Ollama models
+                if model.get("type") == "ollama_model":
+                    console.print("\n[yellow]⚠ Warning: Ollama GGUF Model[/yellow]")
+                    console.print(
+                        "GGUF support in vLLM is experimental and varies by model architecture."
+                    )
+                    console.print(
+                        "\n[cyan]Important:[/cyan] Not all GGUF models are supported."
+                    )
+                    console.print("\nFor compatibility information, see:")
+                    console.print(
+                        "  • vLLM-CLI Guide: [cyan]https://github.com/Chen-zexi/vllm-cli/blob/main/docs/ollama-integration.md[/cyan]"
+                    )
+                    console.print(
+                        "  • vLLM Docs: [cyan]https://docs.vllm.ai/en/latest/models/supported_models.html[/cyan]"
+                    )
+
+                    console.print(
+                        "\n[cyan]Continue with this model? (Y/n):[/cyan] ", end=""
+                    )
+                    confirm = input().strip().lower()
+                    if confirm not in ["", "y", "yes"]:
+                        return select_model()  # Go back to selection
+
+                    # Return the GGUF file path with all metadata including name
+                    return {
+                        "model": model["path"],
+                        "path": model["path"],  # Include path
+                        "served_model_name": model[
+                            "name"
+                        ],  # Use correct field name for vLLM
+                        "type": "ollama_model",  # Preserve type
+                        "quantization": "gguf",
+                        "experimental": True,
+                    }
+
                 # For custom models, always use path regardless of publisher
                 # Custom models are identified by their type
                 if model.get("type") == "custom_model" and model.get("path"):
@@ -445,22 +485,59 @@ def handle_model_management() -> str:
             )
 
             try:
+                import time
+
                 from ..models import get_model_manager
 
-                # Get the model manager and refresh cache
+                # Get the model manager
                 model_manager = get_model_manager()
+
+                # Get old cache stats for comparison
+                old_stats = model_manager.get_cache_stats()
+                old_count = old_stats.get("cached_models_count", 0)
+
+                # Show scanning progress
+                console.print("\n[cyan]Step 1/3:[/cyan] Refreshing model registry...")
+
+                # Refresh the cache
                 model_manager.refresh_cache()
 
-                # Show success message
+                console.print("[cyan]Step 2/3:[/cyan] Clearing old cache...")
+                time.sleep(0.1)  # Brief pause for visual feedback
+
+                console.print("[cyan]Step 3/3:[/cyan] Loading fresh model data...")
+                time.sleep(0.1)  # Brief pause for visual feedback
+
+                # Get new cache stats to show user
+                new_stats = model_manager.get_cache_stats()
+                new_count = new_stats.get("cached_models_count", 0)
+
+                # Show success message with details
                 console.print("\n[green]✓ Model cache refreshed successfully![/green]")
                 console.print(
-                    "[dim]The serving menu will now show updated models.[/dim]"
+                    "[dim]The serving menu will now show all current models.[/dim]"
                 )
 
-                # Get cache stats to show user
-                stats = model_manager.get_cache_stats()
-                model_count = stats.get("cached_models_count", 0)
-                console.print(f"\n[cyan]Found {model_count} model(s) in cache[/cyan]")
+                # Show model count changes
+                if old_count != new_count:
+                    diff = new_count - old_count
+                    if diff > 0:
+                        console.print(
+                            f"\n[cyan]Models in cache: {new_count} (+{diff} new)[/cyan]"
+                        )
+                    else:
+                        console.print(
+                            f"\n[cyan]Models in cache: {new_count} ({diff} removed)[/cyan]"
+                        )
+                else:
+                    console.print(
+                        f"\n[cyan]Models in cache: {new_count} (no changes)[/cyan]"
+                    )
+
+                # Show cache freshness
+                console.print(
+                    f"[dim]Cache TTL: {new_stats.get('ttl_seconds', 30)} seconds[/dim]"
+                )
 
             except Exception as e:
                 console.print(f"[red]Error refreshing cache: {e}[/red]")

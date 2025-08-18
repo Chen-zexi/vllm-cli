@@ -84,6 +84,7 @@ class ModelDirectoriesUI:
             options = [
                 "Add Directory",
                 "Remove Directory",
+                "Toggle Ollama Scanning",
                 "Scan All Directories",
                 "View Directory Statistics",
             ]
@@ -98,6 +99,8 @@ class ModelDirectoriesUI:
                 self._add_directory()
             elif action == "Remove Directory":
                 self._remove_directory()
+            elif action == "Toggle Ollama Scanning":
+                self._toggle_ollama_scanning()
             elif action == "Scan All Directories":
                 self._scan_directories()
             elif action == "View Directory Statistics":
@@ -108,9 +111,21 @@ class ModelDirectoriesUI:
         try:
             directories = self.api.list_directories()
 
+            # Get Ollama status
+            ollama_status = self.api.get_ollama_status()
+            ollama_enabled = ollama_status.get("scan_enabled", False)
+
+            # Display Ollama scanning status
+            if ollama_enabled:
+                console.print(
+                    "\n[bold]Ollama Scanning:[/bold] [green]✓ Enabled[/green]"
+                )
+            else:
+                console.print("\n[bold]Ollama Scanning:[/bold] [red]✗ Disabled[/red]")
+
             if not directories:
-                console.print("\n[yellow]No custom directories configured.[/yellow]")
-                console.print("[dim]Using default HuggingFace cache locations.[/dim]\n")
+                console.print("\n[yellow]No directories configured.[/yellow]")
+                console.print("[dim]Using default locations only.[/dim]\n")
                 return
 
             # Create table for directories
@@ -122,11 +137,26 @@ class ModelDirectoriesUI:
             table.add_column("#", style="cyan", width=3)
             table.add_column("Path", style="white")
             table.add_column("Type", style="yellow", width=15)
+            table.add_column("Source", style="magenta", width=15)
             table.add_column("Status", style="green", width=10)
 
             for idx, dir_info in enumerate(directories, 1):
                 path = dir_info.get("path", "")
                 dir_type = dir_info.get("type", "custom")
+
+                dir_source = dir_info.get("source", "unknown")
+
+                # Format source for display
+                if dir_source == "default_cache":
+                    source_display = "Default HF"
+                elif dir_source == "default_ollama":
+                    source_display = "Default Ollama"
+                elif dir_source == "custom_ollama":
+                    source_display = "Custom Ollama"
+                elif dir_source.startswith("custom"):
+                    source_display = "Custom"
+                else:
+                    source_display = dir_source.capitalize()
 
                 # Check if directory exists
                 path_obj = Path(path)
@@ -136,7 +166,9 @@ class ModelDirectoriesUI:
                     else "[red]✗ Missing[/red]"
                 )
 
-                table.add_row(str(idx), path, dir_type.capitalize(), status)
+                table.add_row(
+                    str(idx), path, dir_type.capitalize(), source_display, status
+                )
 
             console.print(table)
             console.print()
@@ -193,6 +225,7 @@ class ModelDirectoriesUI:
             "HuggingFace cache",
             "Custom models",
             "LoRA adapters",
+            "Ollama models",
         ]
 
         type_selection = unified_prompt(
@@ -204,10 +237,73 @@ class ModelDirectoriesUI:
             "HuggingFace cache": "huggingface",
             "Custom models": "custom",
             "LoRA adapters": "lora",
+            "Ollama models": "ollama",
         }
         dir_type = type_map.get(type_selection, "auto")
 
-        # Add directory
+        # Special handling for Ollama directories
+        if dir_type == "ollama":
+            # Check for Ollama structure
+            has_manifests = (Path(path) / "manifests").exists()
+            has_blobs = (Path(path) / "blobs").exists()
+
+            if not (has_manifests and has_blobs):
+                console.print(
+                    "\n[yellow]Warning: Directory doesn't have standard Ollama structure[/yellow]"
+                )
+                console.print(f"  Manifests directory: {'✓' if has_manifests else '✗'}")
+                console.print(f"  Blobs directory: {'✓' if has_blobs else '✗'}")
+
+                # Ask if they want to add it anyway
+                confirm_choices = ["Yes, add anyway", "No, cancel"]
+                confirm_choice = unified_prompt(
+                    "confirm_ollama",
+                    "Add as Ollama directory anyway?",
+                    confirm_choices,
+                    allow_back=False,
+                )
+
+                if confirm_choice != "Yes, add anyway":
+                    console.print("\n[yellow]Cancelled[/yellow]")
+                    input("\nPress Enter to continue...")
+                    return
+
+            # Add as Ollama directory
+            try:
+                success = self.api.add_ollama_directory(path)
+                if success:
+                    console.print(
+                        f"\n[green]✓ Successfully added Ollama directory:[/green] {path}"
+                    )
+
+                    # Enable Ollama scanning if not already enabled
+                    ollama_status = self.api.get_ollama_status()
+                    if not ollama_status.get("scan_enabled", False):
+                        console.print(
+                            "\n[yellow]Note: Ollama scanning is currently disabled[/yellow]"
+                        )
+                        enable_choices = ["Yes, enable now", "No, keep disabled"]
+                        enable_choice = unified_prompt(
+                            "enable_ollama",
+                            "Enable Ollama scanning?",
+                            enable_choices,
+                            allow_back=False,
+                        )
+
+                        if enable_choice == "Yes, enable now":
+                            self.api.toggle_ollama_scanning()
+                            console.print("[green]✓ Ollama scanning enabled[/green]")
+                else:
+                    console.print(
+                        "\n[red]Failed to add Ollama directory (may already exist)[/red]"
+                    )
+            except Exception as e:
+                console.print(f"\n[red]Error adding Ollama directory: {e}[/red]")
+
+            input("\nPress Enter to continue...")
+            return
+
+        # Add regular directory
         try:
             success = self.api.add_directory(path, dir_type)
             if success:
@@ -301,7 +397,15 @@ class ModelDirectoriesUI:
 
                 if confirm == "Yes, remove this directory":
                     try:
-                        success = self.api.remove_directory(selected_path)
+                        # Check if it's an Ollama directory
+                        dir_source = dir_info.get("source", "")
+                        if dir_info.get("type") == "ollama" and "ollama" in dir_source:
+                            # Remove as Ollama directory
+                            success = self.api.remove_ollama_directory(selected_path)
+                        else:
+                            # Remove as regular directory
+                            success = self.api.remove_directory(selected_path)
+
                         if success:
                             console.print(
                                 f"\n[green]✓ Removed directory: {selected_path}[/green]"
@@ -376,6 +480,84 @@ class ModelDirectoriesUI:
 
         except Exception as e:
             console.print(f"[red]Error scanning directory: {e}[/red]")
+
+    def _toggle_ollama_scanning(self):
+        """Toggle Ollama model scanning on/off."""
+        console.print("\n[bold cyan]Ollama Model Scanning[/bold cyan]")
+
+        try:
+            # Get current status
+            ollama_status = self.api.get_ollama_status()
+            current_state = ollama_status.get("scan_enabled", False)
+
+            # Display current state
+            if current_state:
+                console.print(
+                    "\nOllama scanning is currently: [green]✓ Enabled[/green]"
+                )
+                console.print("\nDefault Ollama directories being scanned:")
+                for dir_path in ollama_status.get("default_directories", []):
+                    if Path(dir_path).exists():
+                        console.print(f"  • {dir_path}")
+            else:
+                console.print("\nOllama scanning is currently: [red]✗ Disabled[/red]")
+                console.print("\n[dim]Enable to scan Ollama model directories[/dim]")
+
+            # Ask to toggle
+            toggle_choices = [
+                "Yes, toggle it" if current_state else "Yes, enable it",
+                "No, keep current setting",
+            ]
+
+            toggle_choice = unified_prompt(
+                "toggle_ollama",
+                f"{'Disable' if current_state else 'Enable'} Ollama scanning?",
+                toggle_choices,
+                allow_back=False,
+            )
+
+            if toggle_choice and toggle_choice.startswith("Yes"):
+                new_state = self.api.toggle_ollama_scanning()
+
+                if new_state:
+                    console.print("\n[green]✓ Ollama scanning enabled[/green]")
+                    console.print(
+                        "[dim]Ollama models will now be included in scans[/dim]"
+                    )
+                else:
+                    console.print("\n[yellow]Ollama scanning disabled[/yellow]")
+                    console.print(
+                        "[dim]Ollama models will be excluded from scans[/dim]"
+                    )
+
+                # Offer to refresh cache
+                refresh_choices = ["Yes, refresh now", "No, refresh later"]
+                refresh_choice = unified_prompt(
+                    "refresh_cache",
+                    "Refresh model cache to apply changes?",
+                    refresh_choices,
+                    allow_back=False,
+                )
+
+                if refresh_choice == "Yes, refresh now":
+                    console.print("\n[cyan]Refreshing model cache...[/cyan]")
+
+                    # Import and use model manager to refresh
+                    try:
+                        from ..models import get_model_manager
+
+                        model_manager = get_model_manager()
+                        model_manager.refresh_cache()
+                        console.print("[green]✓ Model cache refreshed[/green]")
+                    except Exception as e:
+                        console.print(f"[red]Failed to refresh cache: {e}[/red]")
+            else:
+                console.print("\n[yellow]Settings unchanged[/yellow]")
+
+        except Exception as e:
+            console.print(f"\n[red]Error toggling Ollama scanning: {e}[/red]")
+
+        input("\nPress Enter to continue...")
 
     def _show_statistics(self):
         """Show statistics about managed assets."""

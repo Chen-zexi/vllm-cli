@@ -5,8 +5,8 @@ System environment utilities.
 Provides functions for working with system environments,
 package managers, and environment detection.
 """
-import subprocess
 import logging
+import subprocess
 from typing import List
 
 logger = logging.getLogger(__name__)

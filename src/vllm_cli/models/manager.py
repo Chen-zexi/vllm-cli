@@ -46,8 +46,12 @@ class ModelManager:
             - display_name: Human-readable model name
             - metadata: Additional model metadata
         """
-        # Check cache first (unless refresh is forced)
-        if not refresh:
+        # If refresh is forced, clear cache first to ensure fresh data
+        if refresh:
+            self.cache.clear_cache()
+            logger.debug("Cache cleared for forced refresh")
+        else:
+            # Check cache only if not refreshing
             cached_models = self.cache.get_cached_models()
             if cached_models is not None:
                 return cached_models
@@ -58,9 +62,15 @@ class ModelManager:
         # Process and normalize model data
         processed_models = []
         for item in models:
-            if item.get("type") in ["model", "custom_model"]:
-                model_dict = build_model_dict(item)
-                processed_models.append(model_dict)
+            # Accept all model types from hf-model-tool
+            model_types = ["model", "custom_model", "ollama_model", "gguf_model"]
+            if item.get("type") in model_types:
+                # For Ollama/GGUF models, use the item directly (already formatted)
+                if item.get("type") in ["ollama_model", "gguf_model"]:
+                    processed_models.append(item)
+                else:
+                    model_dict = build_model_dict(item)
+                    processed_models.append(model_dict)
 
         # Sort models by name
         processed_models.sort(key=lambda x: x["name"])
@@ -196,9 +206,55 @@ class ModelManager:
 
     def refresh_cache(self) -> None:
         """Force refresh of the model cache."""
+        # First, force registry refresh to pick up any changes
+        try:
+            import os
+            from pathlib import Path
+
+            from hf_model_tool import get_registry
+
+            # Clear all possible cache files
+            cache_locations = [
+                Path.home() / ".config/hf-model-tool/registry_cache.json",
+                Path.home() / ".cache/hf-model-tool/registry.json",
+                Path.home() / ".hf-model-tool/cache.json",
+            ]
+
+            for cache_file in cache_locations:
+                if cache_file.exists():
+                    try:
+                        os.remove(cache_file)
+                        logger.debug(f"Removed cache file: {cache_file}")
+                    except Exception as e:
+                        logger.debug(f"Could not remove {cache_file}: {e}")
+
+            # Get registry and clear its in-memory cache
+            registry = get_registry()
+
+            # Clear all in-memory collections
+            registry.models.clear()
+            registry.custom_models.clear()
+            registry.ollama_models.clear()
+            registry.gguf_models.clear()
+            registry.lora_adapters.clear()
+            registry.datasets.clear()
+
+            # Reset scan time to force rescan
+            registry._last_scan_time = 0
+
+            # Force complete rescan without incremental updates
+            registry.scan_all(force=True, incremental=False)
+            logger.info("Forced complete registry refresh")
+        except Exception as e:
+            logger.debug(f"Registry refresh error: {e}")
+
+        # Clear the cache to ensure we don't get stale data
         self.cache.clear_cache()
-        self.list_available_models(refresh=True)
-        logger.info("Model cache refreshed")
+        logger.debug("Cache cleared")
+
+        # Now fetch fresh models - this will populate the cache with new data
+        models = self.list_available_models(refresh=True)
+        logger.info(f"Model cache refreshed with {len(models)} models")
 
     def get_cache_stats(self) -> Dict[str, Any]:
         """

@@ -7,8 +7,8 @@ architecture information, and resource requirements.
 """
 import json
 import logging
-from typing import Dict, Any, Optional
 from pathlib import Path
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 

@@ -15,39 +15,39 @@ The package supports both hf-model-tool integration and fallback directory
 scanning for maximum compatibility.
 """
 
-# Main model management functions
-from .manager import (
-    ModelManager,
-    get_model_manager,
-    list_available_models,
-    get_model_details,
-    search_models,
+# Cache utilities
+from .cache import (
+    ModelCache,
+    cache_models,
+    clear_global_cache,
+    get_cached_models,
+    get_global_cache,
+    get_global_cache_stats,
 )
 
 # Discovery functions
 from .discovery import (
-    scan_for_models,
-    scan_for_lora_adapters,
     build_model_dict,
-    validate_model_path,
     find_model_by_name,
+    scan_for_lora_adapters,
+    scan_for_models,
+    validate_model_path,
 )
 
-# Cache utilities
-from .cache import (
-    ModelCache,
-    get_global_cache,
-    cache_models,
-    get_cached_models,
-    clear_global_cache,
-    get_global_cache_stats,
+# Main model management functions
+from .manager import (
+    ModelManager,
+    get_model_details,
+    get_model_manager,
+    list_available_models,
+    search_models,
 )
 
 # Metadata extraction
 from .metadata import (
+    analyze_model_compatibility,
     extract_model_config,
     get_model_requirements,
-    analyze_model_compatibility,
 )
 
 __all__ = [

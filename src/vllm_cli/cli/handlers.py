@@ -378,7 +378,32 @@ def _build_serve_config(
     Returns:
         Configuration dictionary for the server
     """
-    config = {"model": args.model}
+    # Handle special case where model might be a dict (for GGUF/Ollama models from UI)
+    if isinstance(args.model, dict):
+        # Check if this is an Ollama model with name metadata
+        if args.model.get("type") == "ollama_model" and args.model.get("name"):
+            # For Ollama models, create special config with served_model_name
+            config = {
+                "model": {
+                    "model": args.model.get("path", args.model.get("model")),
+                    "quantization": "gguf",
+                    "served_model_name": args.model.get(
+                        "name"
+                    ),  # Use Ollama model name
+                }
+            }
+            console.print(f"[cyan]Using Ollama model: {args.model.get('name')}[/cyan]")
+        else:
+            # Extract GGUF-specific configuration (non-Ollama)
+            config = {
+                "model": args.model.get("model"),
+                "quantization": args.model.get("quantization", "gguf"),
+            }
+        # Add warning about experimental support
+        if args.model.get("experimental"):
+            console.print("[yellow]⚠ Using experimental GGUF support[/yellow]")
+    else:
+        config = {"model": args.model}
 
     # Load profile if specified
     if args.profile:

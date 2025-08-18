@@ -5,9 +5,9 @@ Server utilities for vLLM CLI.
 Provides utility functions for port management, log cleanup, and other
 server-related operations.
 """
-import time
-import socket
 import logging
+import socket
+import time
 from pathlib import Path
 
 logger = logging.getLogger(__name__)

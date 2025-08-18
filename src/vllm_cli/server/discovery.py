@@ -6,7 +6,7 @@ Scans system processes to detect vLLM servers that were started
 independently of this CLI tool.
 """
 import logging
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 

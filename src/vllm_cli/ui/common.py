@@ -4,11 +4,12 @@ Common UI utilities and shared components for vLLM CLI.
 
 Provides console setup, panel creation, and shared UI elements.
 """
-import os
 import logging
+import os
+
+from rich import box
 from rich.console import Console
 from rich.panel import Panel
-from rich import box
 
 logger = logging.getLogger(__name__)
 

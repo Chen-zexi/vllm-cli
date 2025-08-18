@@ -6,9 +6,9 @@ Provides centralized management of validation rules and orchestrates
 validation across multiple fields with dependency checking.
 """
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, List, Optional
 
-from .base import BaseValidator, ValidationResult, CompositeValidator
+from .base import BaseValidator, CompositeValidator, ValidationResult
 
 logger = logging.getLogger(__name__)
 

@@ -13,37 +13,37 @@ Main Components:
 - Environment: Environment and package manager integration
 """
 
-# GPU utilities
-from .gpu import get_gpu_info, get_cuda_version
+from .capabilities import (
+    get_attention_backend_capabilities,
+    get_gpu_capabilities,
+    get_performance_recommendations,
+    get_quantization_capabilities,
+)
 
-# Memory utilities
-from .memory import get_memory_info, MEMORY_CACHE_TTL
-
-# Requirements checking
-from .requirements import check_system_requirements, check_vllm_installation
-
-# Formatting utilities
-from .formatting import format_size
+# Dependencies and capabilities
+from .dependencies import (
+    check_optimization_recommendations,
+    get_attention_backend_info,
+    get_core_dependencies,
+    get_dependency_info,
+    get_environment_info,
+    get_quantization_info,
+)
 
 # Environment utilities
 from .environment import get_conda_envs
 
-# Dependencies and capabilities
-from .dependencies import (
-    get_dependency_info,
-    get_attention_backend_info,
-    get_quantization_info,
-    get_core_dependencies,
-    get_environment_info,
-    check_optimization_recommendations,
-)
+# Formatting utilities
+from .formatting import format_size
 
-from .capabilities import (
-    get_gpu_capabilities,
-    get_attention_backend_capabilities,
-    get_quantization_capabilities,
-    get_performance_recommendations,
-)
+# GPU utilities
+from .gpu import get_cuda_version, get_gpu_info
+
+# Memory utilities
+from .memory import MEMORY_CACHE_TTL, get_memory_info
+
+# Requirements checking
+from .requirements import check_system_requirements, check_vllm_installation
 
 __all__ = [
     # GPU

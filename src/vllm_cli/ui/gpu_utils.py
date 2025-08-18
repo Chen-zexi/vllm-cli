@@ -7,15 +7,16 @@ code duplication across various UI components. It provides consistent
 GPU status panels, summaries, and display utilities.
 """
 import logging
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+
+from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
-from rich.panel import Panel
 
-from ..system import get_gpu_info, format_size
 from ..config import ConfigManager
+from ..system import format_size, get_gpu_info
+from .common import console, create_panel
 from .progress_styles import get_progress_bar
-from .common import create_panel, console
 
 logger = logging.getLogger(__name__)
 

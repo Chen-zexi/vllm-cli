@@ -207,8 +207,33 @@ class ConfigManager:
         args = []
 
         # Special handling for model (positional argument)
+        # Check if this is a GGUF/Ollama configuration
+        if (
+            isinstance(config.get("model"), dict)
+            and "quantization" in config["model"]
+            and config["model"]["quantization"] == "gguf"
+        ):
+            # Extract GGUF model config
+            gguf_config = config["model"]
+            model_path = gguf_config.get("model", "unknown")
+            args.extend(["serve", model_path])
+
+            # Set quantization to gguf
+            config["quantization"] = "gguf"
+
+            # Add served-model-name if provided (for Ollama models)
+            if "served_model_name" in gguf_config:
+                config["served_model_name"] = gguf_config["served_model_name"]
+                logger.info(
+                    f"Configuring GGUF model: {model_path} as {gguf_config['served_model_name']}"
+                )
+            else:
+                logger.info(f"Configuring GGUF model: {model_path}")
+
         # Check if this is a LoRA configuration
-        if isinstance(config.get("model"), dict) and "lora_modules" in config["model"]:
+        elif (
+            isinstance(config.get("model"), dict) and "lora_modules" in config["model"]
+        ):
             # Extract base model and LoRA config
             lora_config = config["model"]
             base_model = lora_config.get("model", "unknown")

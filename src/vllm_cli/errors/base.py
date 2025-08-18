@@ -5,7 +5,7 @@ Base exception classes for vLLM CLI.
 Defines the base VLLMCLIError class and common error handling patterns.
 """
 import logging
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 

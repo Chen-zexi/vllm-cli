@@ -70,15 +70,25 @@ def handle_serve_with_profile() -> str:
     if not model_selection:
         return "continue"
 
-    # Handle LoRA model selection
+    # Handle different model selection formats
     lora_modules = None
-    if isinstance(model_selection, dict) and "lora_modules" in model_selection:
-        # New format from select_model_with_lora
-        model = model_selection["model"]
-        lora_modules = model_selection["lora_modules"]
-        # Store the full config for later processing
-        model_config = model_selection
+    if isinstance(model_selection, dict):
+        if "type" in model_selection and model_selection["type"] == "ollama_model":
+            # Ollama/GGUF model configuration
+            model = model_selection["model"]  # Path to GGUF file
+            model_config = model_selection  # Keep full config for GGUF setup
+            logger.info(f"Selected Ollama model: {model_selection.get('name', model)}")
+        elif "lora_modules" in model_selection:
+            # LoRA configuration
+            model = model_selection["model"]
+            lora_modules = model_selection["lora_modules"]
+            model_config = model_selection
+        else:
+            # Other dict format - use as is
+            model = model_selection.get("model", model_selection)
+            model_config = model_selection
     else:
+        # Simple string model name
         model = model_selection
         model_config = None
 
@@ -143,15 +153,25 @@ def handle_custom_config() -> str:
     if not model_selection:
         return "continue"
 
-    # Handle LoRA model selection
+    # Handle different model selection formats
     lora_modules = None
-    if isinstance(model_selection, dict) and "lora_modules" in model_selection:
-        # New format from select_model_with_lora
-        model = model_selection["model"]
-        lora_modules = model_selection["lora_modules"]
-        # Store the full config for later processing
-        model_config = model_selection
+    if isinstance(model_selection, dict):
+        if "type" in model_selection and model_selection["type"] == "ollama_model":
+            # Ollama/GGUF model configuration
+            model = model_selection["model"]  # Path to GGUF file
+            model_config = model_selection  # Keep full config for GGUF setup
+            logger.info(f"Selected Ollama model: {model_selection.get('name', model)}")
+        elif "lora_modules" in model_selection:
+            # LoRA configuration
+            model = model_selection["model"]
+            lora_modules = model_selection["lora_modules"]
+            model_config = model_selection
+        else:
+            # Other dict format - use as is
+            model = model_selection.get("model", model_selection)
+            model_config = model_selection
     else:
+        # Simple string model name
         model = model_selection
         model_config = None
 

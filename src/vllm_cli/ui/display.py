@@ -5,12 +5,13 @@ Display utilities for vLLM CLI.
 Provides functions for displaying configurations and profiles.
 """
 import logging
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
+
 from rich.table import Table
 
 from ..config import ConfigManager
-from .navigation import unified_prompt
 from .common import console
+from .navigation import unified_prompt
 
 logger = logging.getLogger(__name__)
 

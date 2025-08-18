@@ -6,8 +6,8 @@ Handles main menu display and navigation routing.
 """
 import logging
 
-from .navigation import unified_prompt
 from ..server import get_active_servers
+from .navigation import unified_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -17,16 +17,16 @@ def show_main_menu() -> str:
     Display the main menu and return the selected action.
     """
     # Import here to avoid circular dependencies
+    from .log_viewer import select_server_for_logs, show_log_menu
+    from .model_manager import handle_model_management
     from .server_control import (
+        handle_custom_config,
         handle_quick_serve,
         handle_serve_with_profile,
-        handle_custom_config,
     )
     from .server_monitor import monitor_active_servers
-    from .model_manager import handle_model_management
-    from .system_info import show_system_info
     from .settings import handle_settings
-    from .log_viewer import select_server_for_logs, show_log_menu
+    from .system_info import show_system_info
 
     # Check for active servers
     active_servers = get_active_servers()

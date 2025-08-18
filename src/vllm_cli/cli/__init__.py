@@ -14,30 +14,30 @@ The CLI supports both direct command execution and interactive mode,
 with rich formatting and comprehensive error handling.
 """
 
-# Main CLI functions
-from .utils import handle_cli_command, main
-
-# Parser functions
-from .parser import create_parser, parse_args
-
 # Individual command handlers
 from .handlers import (
-    handle_serve,
     handle_info,
     handle_models,
+    handle_serve,
     handle_status,
     handle_stop,
 )
 
+# Parser functions
+from .parser import create_parser, parse_args
+
 # CLI utilities
+# Main CLI functions
 from .utils import (
-    validate_cli_args,
     format_cli_output,
     get_user_confirmation,
+    handle_cli_command,
+    main,
     print_cli_error,
-    print_cli_warning,
-    print_cli_success,
     print_cli_info,
+    print_cli_success,
+    print_cli_warning,
+    validate_cli_args,
 )
 
 __all__ = [

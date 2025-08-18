@@ -27,6 +27,7 @@ def scan_for_models() -> List[Dict[str, Any]]:
     try:
         # Try using shared registry first for best performance
         from hf_model_tool import get_registry
+        from hf_model_tool.config import ConfigManager as HFConfigManager
 
         registry = get_registry()
         registry.scan_all()  # Ensure data is current
@@ -34,6 +35,22 @@ def scan_for_models() -> List[Dict[str, Any]]:
         # Get all models (including custom)
         models = list(registry.models.values())
         models.extend(registry.custom_models.values())
+
+        # Check if Ollama scanning is enabled in hf-model-tool config
+        hf_config_manager = HFConfigManager()
+        hf_config = hf_config_manager.load_config()
+        scan_ollama = hf_config.get("scan_ollama", False)
+        has_ollama_dirs = bool(hf_config.get("ollama_directories", []))
+
+        # Only include Ollama models if scanning is enabled or custom dirs exist
+        if scan_ollama or has_ollama_dirs:
+            models.extend(registry.ollama_models.values())
+            models.extend(registry.gguf_models.values())
+            logger.info(
+                f"Including Ollama models (scan_ollama={scan_ollama}, custom_dirs={has_ollama_dirs})"
+            )
+        else:
+            logger.info("Excluding Ollama models (scanning disabled in hf-model-tool)")
 
         if models:
             logger.info(f"Found {len(models)} models via ModelRegistry")

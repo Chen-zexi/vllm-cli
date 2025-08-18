@@ -5,9 +5,9 @@ System memory information utilities.
 Provides system memory information gathering with caching support
 to avoid excessive system calls.
 """
-import time
 import logging
-from typing import Dict, Any, Optional, Tuple
+import time
+from typing import Any, Dict, Optional, Tuple
 
 import psutil
 

@@ -17,10 +17,10 @@ a unified interface for configuration operations.
 
 # Main configuration manager
 from .manager import ConfigManager
+from .persistence import PersistenceManager
 
 # Sub-managers for direct access if needed
 from .profiles import ProfileManager
 from .schemas import SchemaManager
-from .persistence import PersistenceManager
 
 __all__ = ["ConfigManager", "ProfileManager", "SchemaManager", "PersistenceManager"]

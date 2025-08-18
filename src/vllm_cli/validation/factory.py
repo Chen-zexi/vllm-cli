@@ -10,11 +10,11 @@ from typing import Any, List, Optional
 
 from .base import CompositeValidator, DependencyValidator
 from .types import (
-    IntegerValidator,
-    FloatValidator,
-    StringValidator,
     BooleanValidator,
     ChoiceValidator,
+    FloatValidator,
+    IntegerValidator,
+    StringValidator,
 )
 
 logger = logging.getLogger(__name__)

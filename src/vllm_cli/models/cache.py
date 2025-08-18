@@ -5,9 +5,9 @@ Model caching utilities for vLLM CLI.
 Provides caching functionality for model discovery results to improve
 performance when repeatedly accessing model information.
 """
-import time
 import logging
-from typing import List, Dict, Any, Optional, Tuple
+import time
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +70,8 @@ class ModelCache:
     def clear_cache(self) -> None:
         """Clear the model cache."""
         self._cache = None
+        # Increment misses to reflect that the next access will be a miss
+        self._stats["misses"] += 1
         logger.debug("Model cache cleared")
 
     def is_cached(self) -> bool:
@@ -128,6 +130,15 @@ class ModelCache:
             stats["cached_models_count"] = 0
 
         return stats
+
+    def get_stats(self) -> Dict[str, Any]:
+        """
+        Alias for get_cache_stats() for backward compatibility.
+
+        Returns:
+            Dictionary with cache performance statistics
+        """
+        return self.get_cache_stats()
 
     def reset_stats(self) -> None:
         """Reset cache statistics."""
