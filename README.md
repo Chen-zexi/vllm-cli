@@ -22,7 +22,11 @@ A command-line interface tool for serving Large Language Models using vLLM. Prov
 - **System Information**: GPU, memory, and CUDA compatibility checking
 - **Log Viewer**: View the complete log file when server startup fails
 
-## What's New -- New Features in v0.2.0
+## What's New in v0.2.2
+
+- **Model Manifest Support**: Map custom models in vLLM CLI native way with `models_manifest.json`
+- **Documentation**: New [custom model serving guide](docs/custom-model-serving.md) for serving models from custom directories
+- **Bug Fixes**: Fixed serving models from custom directories and various UI improvements
 
 See [CHANGELOG.md](CHANGELOG.md) for detailed release notes and version history.
 
@@ -228,6 +232,12 @@ Four carefully selected profiles cover the most common use cases. Since vLLM onl
 - **Process Management**: Global server registry with automatic cleanup
 - **Caching**: Performance optimization for model listings and system information
 - **Error Handling**: Comprehensive error recovery and user feedback
+
+## Documentation
+
+### Guides
+- [**Custom Model Serving**](docs/custom-model-serving.md) - Comprehensive guide for serving models from custom directories
+- [**Testing Guide**](docs/TESTING.md) - Instructions for running tests
 
 ## Development
 

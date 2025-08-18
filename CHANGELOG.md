@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.2.2] - 2025-08-18
+
+### Added
+- **Model Manifest Support**: Introduced `models_manifest.json` for mapping custom models in vLLM CLI native way (see [custom-model-serving.md](docs/custom-model-serving.md) for more details)
+- **Documentation**: Added [custom-model-serving.md](docs/custom-model-serving.md) for custom model serving guide
+
+### Fixed
+- Serving models from custom directories now works as expected
+- Fixed some UI issues
+
+
 ## [0.2.1] - 2025-08-17
 
 ### Fixed
@@ -69,6 +80,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - psutil for system monitoring
 - PyYAML for configuration parsing
 
-[0.2.0]: https://github.com/Chen-zexi/vllm-cli/compare/v0.1.1...v0.2.0
-[0.1.1]: https://github.com/Chen-zexi/vllm-cli/compare/v0.1.0...v0.1.1
-[0.1.0]: https://github.com/Chen-zexi/vllm-cli/releases/tag/v0.1.0
+[0.2.2]: https://github.com/Chen-zexi/vllm-cli/compare/0.2.1...v0.2.2
+[0.2.1]: https://github.com/Chen-zexi/vllm-cli/compare/0.2.0...0.2.1
+[0.2.0]: https://github.com/Chen-zexi/vllm-cli/compare/0.1.1...0.2.0
+[0.1.1]: https://github.com/Chen-zexi/vllm-cli/compare/0.1.0...0.1.1
+[0.1.0]: https://github.com/Chen-zexi/vllm-cli/releases/tag/0.1.0
