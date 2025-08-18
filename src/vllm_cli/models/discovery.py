@@ -9,6 +9,8 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from .manifest import apply_manifest_to_models
+
 logger = logging.getLogger(__name__)
 
 
@@ -416,6 +418,19 @@ def _fallback_model_search() -> List[Dict[str, Any]]:
         Path.home() / "models",  # User home models
     ]
 
+    # Also add user-configured directories from vLLM CLI config
+    try:
+        from ..config import ConfigManager
+
+        config_manager = ConfigManager()
+        user_dirs = config_manager.config.get("model_directories", [])
+        for dir_path in user_dirs:
+            p = Path(dir_path)
+            if p not in search_paths:
+                search_paths.append(p)
+    except Exception as e:
+        logger.debug(f"Could not load user directories: {e}")
+
     for base_path in search_paths:
         if not base_path.exists():
             continue
@@ -452,6 +467,9 @@ def _scan_directory_for_models(base_path: Path) -> List[Dict[str, Any]]:
             model_info = _extract_basic_model_info(model_dir)
             if model_info:
                 models.append(model_info)
+
+    # Apply manifest data if available
+    models = apply_manifest_to_models(models, base_path)
 
     return models
 

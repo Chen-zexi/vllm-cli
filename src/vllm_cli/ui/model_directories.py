@@ -215,6 +215,23 @@ class ModelDirectoriesUI:
                     f"\n[green]✓ Successfully added directory:[/green] {path}"
                 )
 
+                # Inform about manifest file
+                manifest_path = Path(path) / "models_manifest.json"
+                console.print(
+                    Panel.fit(
+                        "[bold yellow]Note about Model Manifest:[/bold yellow]\n\n"
+                        f"A [cyan]models_manifest.json[/cyan] file will be auto-generated at:\n"
+                        f"[dim]{manifest_path}[/dim]\n\n"
+                        "You can manually edit this file to customize:\n"
+                        "  • Custom display names\n"
+                        "  • Model descriptions\n"
+                        "  • Publisher information\n"
+                        "  • Model categories\n\n"
+                        "[dim]The manifest helps organize and customize how models appear.[/dim]",
+                        border_style="yellow",
+                    )
+                )
+
                 # Offer to scan immediately using unified prompt
                 scan_choices = ["Yes, scan now", "No, scan later"]
                 scan_choice = unified_prompt(
@@ -226,6 +243,14 @@ class ModelDirectoriesUI:
 
                 if scan_choice == "Yes, scan now":
                     self._scan_single_directory(path)
+
+                    # After scanning, remind about manifest if models were found
+                    console.print(
+                        "\n[dim]Tip: A models_manifest.json file has been auto-generated.[/dim]"
+                    )
+                    console.print(
+                        "[dim]You can edit it to customize how models appear in the serving menu.[/dim]"
+                    )
             else:
                 console.print("\n[red]Failed to add directory.[/red]")
         except Exception as e:

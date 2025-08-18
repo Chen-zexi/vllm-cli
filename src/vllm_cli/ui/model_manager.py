@@ -220,26 +220,56 @@ def select_model() -> Optional[Any]:
                 providers_dict[provider] = []
             providers_dict[provider].append(model)
 
-        # Sort providers alphabetically
-        sorted_providers = sorted(providers_dict.keys())
+        # Separate local provider from others
+        local_provider = None
+        other_providers = []
 
-        # First, select provider
+        for provider in providers_dict.keys():
+            if provider == "local":
+                local_provider = provider
+            else:
+                other_providers.append(provider)
+
+        # Sort other providers alphabetically
+        other_providers.sort()
+
+        # Build provider choices with separation
         provider_choices = []
-        for provider in sorted_providers:
+
+        # Add other providers first
+        for provider in other_providers:
             count = len(providers_dict[provider])
             provider_choices.append(
                 f"{provider} ({count} model{'s' if count > 1 else ''})"
             )
 
+        # Add separator and local provider at the bottom if it exists
+        if local_provider:
+            # Add separator if there are other providers
+            if other_providers:
+                provider_choices.append("─" * 30)
+            count = len(providers_dict[local_provider])
+            provider_choices.append(
+                f"{local_provider} ({count} model{'s' if count > 1 else ''})"
+            )
+
+        # Count total providers (excluding separator)
+        total_providers = len(providers_dict)
+
         selected_provider = unified_prompt(
             "provider",
-            f"Select Provider ({len(sorted_providers)} available)",
+            f"Select Provider ({total_providers} available)",
             provider_choices,
             allow_back=True,
         )
 
         if not selected_provider or selected_provider == "BACK":
             return None
+
+        # Check if separator was selected (shouldn't happen, but handle it)
+        if selected_provider.startswith("─"):
+            # Retry selection
+            return select_model()
 
         # Extract provider name
         provider_name = selected_provider.split(" (")[0]
@@ -272,12 +302,26 @@ def select_model() -> Optional[Any]:
         # Extract model name and reconstruct full name if needed
         model_display_name = selected.split(" (")[0]
 
-        # Find the full model name
+        # Find the full model and return appropriate identifier
         for model in provider_models:
             check_name = model["name"]
             if check_name.startswith(f"{provider_name}/"):
                 check_name = check_name[len(provider_name) + 1 :]  # noqa: E203
             if check_name == model_display_name or model["name"] == model_display_name:
+                # For custom models, always use path regardless of publisher
+                # Custom models are identified by their type
+                if model.get("type") == "custom_model" and model.get("path"):
+                    return model["path"]
+
+                # For non-HF pattern models (local), also use path
+                model_name = model["name"]
+                if model.get("path") and (
+                    "/" not in model_name  # No HF org/model pattern
+                    or model_name.startswith("/")  # Absolute path
+                    or model.get("publisher")
+                    in ["local", "unknown", None]  # Local publisher
+                ):
+                    return model["path"]
                 return model["name"]
 
         # Fallback
@@ -304,6 +348,7 @@ def handle_model_management() -> str:
             "List All Models",  # hf-model-tool --list
             "Manage Assets",  # hf-model-tool --manage
             "View Model Details",  # hf-model-tool --details
+            "Refresh Model Cache",  # Refresh the cache used by serving menu
         ]
 
         action = unified_prompt(
@@ -386,6 +431,41 @@ def handle_model_management() -> str:
                 console.print("  pip install hf-model-tool")
             except Exception as e:
                 console.print(f"[red]Error: {e}[/red]")
+            input("\nPress Enter to continue...")
+            # Continue loop - stay in model management menu
+
+        elif action == "Refresh Model Cache":
+            # Refresh the model cache used by serving menu
+            console.print(
+                Panel(
+                    "[bold cyan]Refreshing Model Cache[/bold cyan]\n"
+                    "[dim]Scanning all model directories for updates...[/dim]",
+                    border_style="blue",
+                )
+            )
+
+            try:
+                from ..models import get_model_manager
+
+                # Get the model manager and refresh cache
+                model_manager = get_model_manager()
+                model_manager.refresh_cache()
+
+                # Show success message
+                console.print("\n[green]✓ Model cache refreshed successfully![/green]")
+                console.print(
+                    "[dim]The serving menu will now show updated models.[/dim]"
+                )
+
+                # Get cache stats to show user
+                stats = model_manager.get_cache_stats()
+                model_count = stats.get("cached_models_count", 0)
+                console.print(f"\n[cyan]Found {model_count} model(s) in cache[/cyan]")
+
+            except Exception as e:
+                console.print(f"[red]Error refreshing cache: {e}[/red]")
+                logger.error(f"Cache refresh error: {e}")
+
             input("\nPress Enter to continue...")
             # Continue loop - stay in model management menu
 
@@ -516,6 +596,23 @@ def select_model_with_lora() -> Optional[Dict[str, Any]]:
         # Extract model name
         base_model_name = selected_model.split(" (")[0]
 
+        # Find the actual model object to get its path if it's a local/custom model
+        base_model_path_or_name = base_model_name
+        for model in models_with_lora:
+            if model["name"] == base_model_name:
+                # For custom models, always use path regardless of publisher
+                if model.get("type") == "custom_model" and model.get("path"):
+                    base_model_path_or_name = model["path"]
+                # For non-HF pattern models, use the path instead of name
+                elif model.get("path") and (
+                    "/" not in base_model_name  # No HF org/model pattern
+                    or base_model_name.startswith("/")  # Absolute path
+                    or model.get("publisher")
+                    in ["local", "unknown", None]  # Local publisher
+                ):
+                    base_model_path_or_name = model["path"]
+                break
+
         # Now select LoRA adapters for this model
         console.print("\n[cyan]Step 2: Select LoRA Adapters[/cyan]")
         console.print(f"[dim]Base model: {base_model_name}[/dim]\n")
@@ -590,14 +687,14 @@ def select_model_with_lora() -> Optional[Dict[str, Any]]:
                     break
 
         # Return configuration for serving
-        return {"model": base_model_name, "lora_modules": selected_lora_configs}
+        return {"model": base_model_path_or_name, "lora_modules": selected_lora_configs}
 
     except Exception as e:
         console.print(f"[red]Error selecting LoRA adapters: {e}[/red]")
         logger.error(f"LoRA selection error: {e}")
 
         if inquirer.confirm("Continue with base model only?", default=True):
-            return base_model_name
+            return base_model_path_or_name
         return None
 
 
