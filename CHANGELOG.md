@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.4rc1] - 2025-08-18
+
+### Added
+- **Ollama Model Support**: Full integration with Ollama-downloaded models through hf-model-tool
+  - Automatic discovery of Ollama models in user (`~/.ollama`) and system (`/usr/share/ollama`) directories
+  - GGUF format detection and experimental serving support
+
+### Changed
+- Model cache refresh properly respects TTL settings (>60s)
+- Improved path display in model management UI for better clarity
+
+### Fixed
+- Fixed duplicate Ollama models appearing in model list
+- Fixed manual cache refresh not working
+
+
 ## [v0.2.3] - 2025-08-17
 
 ### Fixed

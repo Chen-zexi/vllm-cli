@@ -18,6 +18,7 @@ A command-line interface tool for serving Large Language Models using vLLM. Prov
 - **Interactive Mode**: Rich terminal interface with menu-driven navigation
 - **Command-Line Mode**: Direct CLI commands for automation and scripting
 - **Model Management**: Automatic discovery and management of local models
+- **Ollama Model Support**: Discover and serve Ollama-downloaded GGUF models (experimental)
 - **Remote Model Support**: Serve models directly from HuggingFace Hub without pre-downloading
 - **Configuration Profiles**: Pre-configured and custom server profiles
 - **Server Monitoring**: Real-time monitoring of active vLLM servers
@@ -90,14 +91,28 @@ If you encounter issues when serving a model:
 2. **Consult the official vLLM documentation** - Visit [vLLM docs](https://docs.vllm.ai/) for model-specific requirements and supported features
 3. **Review model requirements** - Some models require specific arguments or particular quantization methods
 
+### Model Not Showing Up?
+
+If your models aren't appearing in the serving menu, see our [Model Discovery Quick Reference](docs/MODEL_DISCOVERY_QUICK_REF.md) for quick fixes, or the [Model Discovery Flow](docs/MODEL_DISCOVERY_FLOW.md) for technical details.
+
 ### Model Management with hf-model-tool
 
 vLLM CLI uses [hf-model-tool](https://github.com/Chen-zexi/hf-model-tool) for local model discovery and management. This is another tool I developed for model management. It provides:
-- Comprehensive model scanning across HuggingFace cache and custom directories
+- Comprehensive model scanning across HuggingFace cache, Ollama directories, and custom locations
+- Ollama model support with GGUF format detection
 - Detailed model information including size, type, and quantization
 - Shared configuration between vLLM CLI and hf-model-tool
 
-**Settings are synchronized** - Any model directories configured in hf-model-tool will automatically be available in vLLM CLI, and vice versa. We encourage you to explore hf-model-tool for advanced model management capabilities. You can also launch it directly within vLLM CLI.
+**Settings are synchronized** - Any model directories configured in hf-model-tool will automatically be available in vLLM CLI, and vice versa. This includes Ollama scanning settings and custom directories.
+
+#### Ollama Model Support
+
+vLLM CLI can discover and serve models downloaded via Ollama:
+- Models are automatically discovered from both user (`~/.ollama`) and system (`/usr/share/ollama`) directories
+- GGUF format models have experimental support in vLLM 0.5.0+
+- See [Ollama Integration Guide](docs/ollama-integration.md) for detailed information
+
+We encourage you to explore hf-model-tool for advanced model management capabilities. You can also launch it directly within vLLM CLI.
 
 ```bash
 # Install hf-model-tool (already included with vLLM CLI)
@@ -237,8 +252,15 @@ Four carefully selected profiles cover the most common use cases. Since vLLM onl
 
 ## Documentation
 
-### Guides
+### Model Discovery & Troubleshooting
+- [**Model Discovery Quick Reference**](docs/MODEL_DISCOVERY_QUICK_REF.md) - Quick troubleshooting guide for model visibility issues
+- [**Model Discovery Flow**](docs/MODEL_DISCOVERY_FLOW.md) - Technical details of how models are discovered and cached
+
+### Integration Guides
+- [**Ollama Integration**](docs/ollama-integration.md) - Guide for using Ollama-downloaded models with vLLM CLI
 - [**Custom Model Serving**](docs/custom-model-serving.md) - Comprehensive guide for serving models from custom directories
+
+### Development
 - [**Testing Guide**](docs/TESTING.md) - Instructions for running tests
 
 ## Development
@@ -286,15 +308,15 @@ Note: Following dependencies are downloaded along with vLLM CLI:
 
 ### v0.2.4 (Upcoming)
 
-- [ ] **GGUF Model Loading** - Load GGUF models from Ollama downloaded directory
+- [x] **Ollama Model Support** - Discover and serve GGUF models from Ollama directories (experimental)
 - [ ] **Docker Backend Support** - Use existing vLLM Docker images as backend
 
 ### To-Do List
 
 - [ ] **AMD GPU Support** - Add support for AMD GPUs (ROCm) in addition to NVIDIA CUDA
-- [ ] **Local Model Support** - Add support to load local models from non-HuggingFace directory formats:
+- [ ] **Enhanced Local Model Support** - Add support for additional local model formats:
   - [ ] Oracle Cloud Infrastructure (OCI) Registry format
-  - [ ] Ollama model format (will be supported in v0.2.4)
+  - [ ] Direct GGUF file loading without Ollama
   - [ ] Other local model formats
 
 ### Future Enhancements
