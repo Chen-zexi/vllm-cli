@@ -12,6 +12,8 @@ CLAUDE.md
 
 /debug_img
 
+/test_model
+
 # Distribution / packaging
 .Python
 build/

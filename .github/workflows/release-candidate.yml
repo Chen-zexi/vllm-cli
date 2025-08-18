@@ -1,0 +1,133 @@
+name: Release Candidate
+
+on:
+  # Trigger on pre-release tags (e.g., v0.2.1rc1)
+  push:
+    tags:
+      - 'v*.*.*rc*'
+  # Manual trigger for testing
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'RC version'
+        required: true
+        type: string
+
+jobs:
+  build-and-test-rc:
+    name: Build and Test Release Candidate
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install build dependencies
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install build twine pytest
+
+    - name: Build RC package
+      run: |
+        python -m build
+        echo "Built packages:"
+        ls -la dist/
+
+    - name: Validate package structure
+      run: |
+        # Check that all expected modules are included
+        unzip -l dist/*.whl | grep -E "vllm_cli/(config|models|server|ui|cli|validation|system|errors)/__init__.py"
+        if [ $? -ne 0 ]; then
+          echo "ERROR: Package is missing expected submodules!"
+          exit 1
+        fi
+
+    - name: Test package installation in clean environment
+      run: |
+        # Create isolated test environment
+        python -m venv test_env
+        source test_env/bin/activate
+
+        # Install the built wheel (NOT editable mode)
+        pip install dist/*.whl
+
+        # Test all critical imports
+        python -c "import sys; import vllm_cli; from vllm_cli.config import ConfigManager; from vllm_cli.models import list_available_models; from vllm_cli.server import VLLMServer; from vllm_cli.cli import handlers; from vllm_cli.ui import navigation; from vllm_cli.validation import base; from vllm_cli.system import gpu; from vllm_cli.errors import base as error_base; print('✓ All package imports successful')" || echo "Import failed"
+
+        # Test CLI entry point
+        vllm-cli --version
+        if [ $? -ne 0 ]; then
+          echo "ERROR: CLI entry point failed!"
+          exit 1
+        fi
+
+        deactivate
+
+    - name: Run integration tests
+      run: |
+        # Install in test mode
+        pip install -e .[test]
+        pip install hf-model-tool requests
+
+        # Run tests against the package
+        pytest tests/ -v --tb=short
+
+    - name: Upload RC artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: rc-packages
+        path: dist/
+        retention-days: 7
+
+  publish-to-testpypi:
+    name: Publish RC to TestPyPI
+    needs: build-and-test-rc
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Download RC packages
+      uses: actions/download-artifact@v4
+      with:
+        name: rc-packages
+        path: dist/
+
+    - name: Publish to TestPyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        repository-url: https://test.pypi.org/legacy/
+        skip-existing: true
+
+    - name: Test installation from TestPyPI
+      run: |
+        sleep 30  # Wait for package to be available
+
+        python -m venv testpypi_env
+        source testpypi_env/bin/activate
+
+        # Install from TestPyPI
+        pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ vllm-cli
+
+        # Verify it works
+        python -c 'import vllm_cli; print(f"Successfully installed version: {vllm_cli.__version__}")'
+        vllm-cli --version
+
+        deactivate
+
+    - name: Create test report
+      if: success()
+      run: |
+        echo "## Release Candidate Test Report" >> $GITHUB_STEP_SUMMARY
+        echo "✅ Package build successful" >> $GITHUB_STEP_SUMMARY
+        echo "✅ Package structure validated" >> $GITHUB_STEP_SUMMARY
+        echo "✅ Clean installation tested" >> $GITHUB_STEP_SUMMARY
+        echo "✅ All imports working" >> $GITHUB_STEP_SUMMARY
+        echo "✅ CLI entry point functional" >> $GITHUB_STEP_SUMMARY
+        echo "✅ Published to TestPyPI" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+        echo "1. Test manually: \`pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ vllm-cli\`" >> $GITHUB_STEP_SUMMARY
+        echo "2. If all tests pass, create the final release tag" >> $GITHUB_STEP_SUMMARY

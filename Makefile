@@ -37,11 +37,13 @@ lint:
 
 # Format code
 format:
+	isort src/ tests/ --profile black --line-length 88
 	black src/ tests/ --line-length 88
 	@echo "✅ Code formatted"
 
 # Check formatting without making changes
 format-check:
+	isort src/ tests/ --profile black --line-length 88 --check --diff
 	black src/ tests/ --line-length 88 --check --diff
 
 # Type checking
@@ -66,6 +68,7 @@ ci-test:
 	@echo "🔧 Running CI/CD Test Suite"
 	@echo "============================"
 	@echo "1️⃣  Formatting check..."
+	@isort src/ tests/ --profile black --line-length 88 --check || (echo "❌ Import order check failed. Run 'make format' to fix" && exit 1)
 	@black src/ tests/ --line-length 88 --check || (echo "❌ Format check failed. Run 'make format' to fix" && exit 1)
 	@echo "✅ Format check passed"
 	@echo ""
