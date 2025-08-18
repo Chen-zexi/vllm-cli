@@ -8,6 +8,8 @@
 
 A command-line interface tool for serving Large Language Models using vLLM. Provides both interactive and command-line modes with features for configuration profiles, model management, and server monitoring.
 
+**Quick Links:** [📚 Documentation](#documentation) | [🗺️ Roadmap](#roadmap)
+
 ![vLLM CLI Welcome Screen](asset/welcome-screen.png)
 *Welcome screen showing GPU status and system overview*
 
@@ -22,7 +24,7 @@ A command-line interface tool for serving Large Language Models using vLLM. Prov
 - **System Information**: GPU, memory, and CUDA compatibility checking
 - **Log Viewer**: View the complete log file when server startup fails
 
-## What's New in v0.2.2
+## What's New in v0.2.3
 
 - **Model Manifest Support**: Map custom models in vLLM CLI native way with `models_manifest.json`
 - **Documentation**: New [custom model serving guide](docs/custom-model-serving.md) for serving models from custom directories
@@ -282,12 +284,17 @@ Note: Following dependencies are downloaded along with vLLM CLI:
 
 ## Roadmap
 
+### v0.2.4 (Upcoming)
+
+- [ ] **GGUF Model Loading** - Load GGUF models from Ollama downloaded directory
+- [ ] **Docker Backend Support** - Use existing vLLM Docker images as backend
+
 ### To-Do List
 
 - [ ] **AMD GPU Support** - Add support for AMD GPUs (ROCm) in addition to NVIDIA CUDA
 - [ ] **Local Model Support** - Add support to load local models from non-HuggingFace directory formats:
   - [ ] Oracle Cloud Infrastructure (OCI) Registry format
-  - [ ] Ollama model format
+  - [ ] Ollama model format (will be supported in v0.2.4)
   - [ ] Other local model formats
 
 ### Future Enhancements
