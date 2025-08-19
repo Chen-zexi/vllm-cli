@@ -36,6 +36,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Configuration: `generation_config`, `generation_config_override`
   - Monitoring: `log_config_file`
   - Advanced: `disable_frontend_multiprocessing`, `disable_async_output_proc`
+- **Enhanced System Information Display**: Use vLLM built-in functions to provide more comprehensive system information
+  - Detailed attention backend usability information (Flash Attention 2/3, xFormers, etc.)
+  - vLLM feature availability checking for each backend
+  - More accurate detection of supported features based on actual vLLM capabilities
 
 ### Changed
 - Environment variables now available in Custom Configuration from main menu
@@ -48,12 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Fixed profile creation inconsistency between Settings and Custom Configuration
-- Fixed confusing configuration loop in server setup
-- GPU device selection properly sets CUDA_VISIBLE_DEVICES
-- Tensor parallel size validation with selected GPU devices
-- Server cleanup behavior now configurable
 - Fixed UI consistency issues where `[?]` prompt appeared on separate lines
-- Environment variables now properly available in Custom Configuration
 
 ## [0.2.4rc1] - 2025-08-19
 
