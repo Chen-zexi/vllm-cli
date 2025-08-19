@@ -5,6 +5,56 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.4rc2] - 2025-08-19
+
+### Added
+- **Comprehensive Environment Variable Support**: Three-tier environment variable system for complete control
+  - **Universal Environment Variables**: Configure in Settings to apply to ALL servers
+  - **Profile Environment Variables**: Save environment variables with profiles
+  - Two-tier priority system: Universal < Profile (overrides universal)
+  - Clear indication of environment variable sources when launching servers
+  - No forced defaults - only passes explicitly configured variables for native vLLM behavior
+- **Hardware-Optimized Profiles**: New built-in profiles specifically for GPT-OSS models on different GPU architectures
+  - `gpt_oss_ampere`: Optimized for GPT-OSS models on NVIDIA A100 GPUs
+  - `gpt_oss_hopper`: Optimized for GPT-OSS models on NVIDIA H100/H200 GPUs
+  - `gpt_oss_blackwell`: Optimized for GPT-OSS models on NVIDIA Blackwell (B100/B200) GPUs
+  - Based on official vLLM documentation recommendations for each GPU architecture
+  - Users are encouraged to refer to [vLLM GPT recipes](https://docs.vllm.ai/projects/recipes/en/latest/OpenAI/GPT-OSS.html) for latest tuning guidelines
+- **GPU Selection Feature**: Select specific GPUs for model serving
+  - CLI: Use `--device` flag (e.g., `--device 0,1` to use GPU 0 and 1)
+  - Interactive: GPU selection UI when configuring advanced settings
+  - Automatic tensor_parallel_size adjustment based on selected GPUs
+  - CUDA_VISIBLE_DEVICES environment variable support
+- **Server Cleanup Control**: Configure whether servers are stopped when CLI exits
+  - New setting in Settings → Server Defaults → "Stop all servers on CLI exit"
+  - Servers can continue running in background when cleanup is disabled
+  - Different exit messages based on cleanup configuration
+- **Enhanced vLLM Arguments**: Added 16+ new critical vLLM arguments for v1 engine
+  - Performance: `max_parallel_loading_workers`, `cpu_offload_space`, `enable_sleep_mode`
+  - Optimization: `calculate_kv_scales`, `long_prefill_token_threshold`, `max_num_partial_prefills`
+  - API: `allowed_origins`, `allowed_headers`, `allowed_methods`, `enable_auto_tool_choice`
+  - Configuration: `generation_config`, `generation_config_override`
+  - Monitoring: `log_config_file`
+  - Advanced: `disable_frontend_multiprocessing`, `disable_async_output_proc`
+
+### Changed
+- Environment variables now available in Custom Configuration from main menu
+- Removed forced `PYTHONUNBUFFERED=1` - users have full control over all environment variables
+- Profile creation workflows unified to use the same comprehensive configuration system
+- Model field excluded from profiles to make them truly model-agnostic
+- Improved configuration validation with new arguments
+- Better error messages for GPU configuration conflicts
+- Enhanced UI for advanced server configuration
+
+### Fixed
+- Fixed profile creation inconsistency between Settings and Custom Configuration
+- Fixed confusing configuration loop in server setup
+- GPU device selection properly sets CUDA_VISIBLE_DEVICES
+- Tensor parallel size validation with selected GPU devices
+- Server cleanup behavior now configurable
+- Fixed UI consistency issues where `[?]` prompt appeared on separate lines
+- Environment variables now properly available in Custom Configuration
+
 ## [0.2.4rc1] - 2025-08-19
 
 ### Added

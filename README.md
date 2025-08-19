@@ -25,11 +25,7 @@ A command-line interface tool for serving Large Language Models using vLLM. Prov
 - **System Information**: GPU, memory, and CUDA compatibility checking
 - **Log Viewer**: View the complete log file when server startup fails
 
-## What's New in v0.2.3
-
-- **Model Manifest Support**: Map custom models in vLLM CLI native way with `models_manifest.json`
-- **Documentation**: New [custom model serving guide](docs/custom-model-serving.md) for serving models from custom directories
-- **Bug Fixes**: Fixed serving models from custom directories and various UI improvements
+## What's New in v0.2.4rc
 
 See [CHANGELOG.md](CHANGELOG.md) for detailed release notes and version history.
 
@@ -160,6 +156,10 @@ vllm-cli serve MODEL_NAME --profile standard
 # Serve with custom parameters
 vllm-cli serve MODEL_NAME --quantization awq --tensor-parallel-size 2
 
+# Serve with specific GPU devices (new in v0.2.5)
+vllm-cli serve MODEL_NAME --device 0,1  # Use GPU 0 and 1
+vllm-cli serve MODEL_NAME --device 2    # Use only GPU 2
+
 # Create and use shortcuts for quick launching
 vllm-cli serve MODEL --profile high_throughput --save-shortcut "my-fast-model"
 vllm-cli serve --shortcut "my-fast-model"
@@ -198,42 +198,43 @@ vllm-cli stop --port 8000
 
 ### Built-in Profiles
 
-Four carefully selected profiles cover the most common use cases. Since vLLM only uses one GPU by default, all profiles include  multi-GPU detection that automatically sets tensor parallelism to utilize all available GPUs.
+Seven carefully designed profiles cover most common use cases and hardware configurations. All profiles include multi-GPU detection that automatically sets tensor parallelism to utilize all available GPUs.
 
-#### `standard` - Minimal configuration with smart defaults
+#### General Purpose Profiles
+
+##### `standard` - Minimal configuration with smart defaults
 *Uses vLLM's defaults configuration. Perfect for most models and hardware setups.*
 
-#### `moe_optimized` - Optimized for Mixture of Experts models
-```json
-{
-  "enable_expert_parallel": true
-}
-```
-*Enables expert parallelism for MoE models like Qwen*
+##### `moe_optimized` - Optimized for Mixture of Experts models
+*Enables expert parallelism for MoE models with optimized environment variables*
 
-#### `high_throughput` - Maximum performance configuration
-```json
-{
-  "max_model_len": 8192,
-  "gpu_memory_utilization": 0.95,
-  "enable_chunked_prefill": true,
-  "max_num_batched_tokens": 8192,
-  "trust_remote_code": true,
-  "enable_prefix_caching": true
-}
-```
-*Aggressive settings for maximum request throughput*
-#### `low_memory` - Memory-constrained environments
-```json
-{
-  "max_model_len": 4096,
-  "gpu_memory_utilization": 0.70,
-  "enable_chunked_prefill": false,
-  "trust_remote_code": true,
-  "quantization": "fp8"
-}
-```
+##### `high_throughput` - Maximum performance configuration
+*Aggressive settings for maximum request throughput with Triton flash attention*
+
+##### `low_memory` - Memory-constrained environments
 *Reduces memory usage through FP8 quantization and conservative settings*
+
+#### Hardware-Specific Profiles for GPT-OSS Models (New in v0.2.5)
+
+> **Note**: For the latest GPU-specific optimizations and model requirements, please refer to the [vLLM GPT recipes](https://docs.vllm.ai/projects/recipes/en/latest/OpenAI/GPT-OSS.html). The built-in profiles provide a starting point that can be customized based on your specific hardware and model requirements.
+
+##### `gpt_oss_ampere` - GPT-OSS on NVIDIA A100 (Ampere)
+*Optimized for GPT-OSS models on A100 GPUs with:*
+- `VLLM_ATTENTION_BACKEND=TRITON_ATTN_VLLM_V1` for optimized attention
+- `VLLM_ENABLE_FUSED_MOE_ACTIVATION_CHUNKING=1` for MoE activation chunking
+- Async scheduling enabled for improved performance
+
+##### `gpt_oss_hopper` - GPT-OSS on NVIDIA H100/H200 (Hopper)
+*Optimized for GPT-OSS models on H100/H200 GPUs with:*
+- `VLLM_ENABLE_FUSED_MOE_ACTIVATION_CHUNKING=1` for MoE activation chunking
+- Async scheduling enabled
+- Auto-detection of tensor parallelism for multi-GPU setups
+
+##### `gpt_oss_blackwell` - GPT-OSS on NVIDIA Blackwell (B100/B200)
+*Optimized for GPT-OSS models on latest Blackwell GPUs with:*
+- `VLLM_USE_TRTLLM_ATTENTION=1` for TensorRT-LLM attention backend
+- `VLLM_USE_FLASHINFER_MXFP4_BF16_MOE=1` for BF16 precision MoE
+- Async scheduling for maximum throughput
 
 ### Error Handling and Log Viewing
 ![Error Handling](asset/error-handling-logs.png)
@@ -297,8 +298,34 @@ src/vllm_cli/
 
 ## Environment Variables
 
+### vLLM CLI Environment Variables
+
 - `VLLM_CLI_ASCII_BOXES`: Use ASCII box drawing characters for compatibility
 - `VLLM_CLI_LOG_LEVEL`: Set logging level (DEBUG, INFO, WARNING, ERROR)
+
+### vLLM Environment Variable Support
+
+vLLM CLI provides comprehensive environment variable management with a three-tier system:
+
+#### 1. Universal Environment Variables
+Configure in **Settings → Universal Environment Variables** to apply to ALL servers. These provide baseline settings across all your deployments.
+
+#### 2. Profile Environment Variables
+Each profile can include specific environment variables that override universal settings. Perfect for hardware or model-specific optimizations.
+
+#### 3. Session Environment Variables
+Set environment variables for one-off server runs directly in Custom Configuration. These are applied only to the current session. **Note: Session environment variables will be set to profile environment variables if you choose to save the custom configuration as a profile.**
+
+**Priority Order**: Universal < Profile = Session
+
+Common vLLM environment variables supported:
+- **GPU Optimization**: `VLLM_ATTENTION_BACKEND`, `VLLM_USE_TRITON_FLASH_ATTN`
+- **MoE Models**: `VLLM_USE_FLASHINFER_MOE_MXFP4_BF16`, `VLLM_ENABLE_FUSED_MOE_ACTIVATION_CHUNKING`
+- **Logging**: `VLLM_LOGGING_LEVEL`, `VLLM_LOG_STATS_INTERVAL`
+- **Memory**: `VLLM_CPU_KVCACHE_SPACE`, `VLLM_ALLOW_LONG_MAX_MODEL_LEN`
+- **CUDA**: `CUDA_VISIBLE_DEVICES`, `CUDA_HOME`, `TORCH_CUDA_ARCH_LIST`
+
+**Note**: vLLM CLI only passes explicitly configured environment variables to preserve native vLLM behavior. No defaults are forced.
 
 ## Requirements
 
@@ -321,18 +348,43 @@ Note: Following dependencies are downloaded along with vLLM CLI:
 
 ## Roadmap
 
-### v0.2.4 (Upcoming)
-
-- [x] **Ollama Model Support** - Discover and serve GGUF models from Ollama directories (experimental)
+### Serving Configurations
+- [x] **Environment Variable Support** - Comprehensive three-tier environment variable system for complete control
+- [x] **GPU Selection Feature** - Select specific GPUs for model serving via `--device` flag or interactive UI
+- [x] **Server Cleanup Control** - Configure whether servers are stopped when CLI exits
+- [x] **vLLM native Arguments** - Added 16+ new critical vLLM arguments for advanced configurations
+- [x] **Shortcuts System** - Save and quickly launch model+profile combinations
 - [ ] **Docker Backend Support** - Use existing vLLM Docker images as backend
 
-### To-Do List
+### UI Features
+- [x] **Rich Terminal UI** - Rich terminal interface with menu-driven navigation
+- [x] **Command-Line Mode** - Direct CLI commands for automation and scripting
+- [x] **System Information** - GPU, memory, and CUDA compatibility checking
+- [ ] **CPU Stats** - CPU usage, memory usage, and disk usage checking
+- [ ] **UI Customization**
+    - [x] Customize GPU stats bar
+    - [x] Customize log refresh frequency
+    - [ ] Customize theme
+    - [ ] Multi-language support
+- [ ] **Server Monitoring**
+    - [x] Real-time monitoring of active vLLM servers
+    - [ ] Server monitoring after exiting program
+- [ ] **Log Viewer**
+    - [x] View the complete log file when server startup fails
+    - [ ] View logs for past runs
 
-- [ ] **AMD GPU Support** - Add support for AMD GPUs (ROCm) in addition to NVIDIA CUDA
-- [ ] **Enhanced Local Model Support** - Add support for additional local model formats:
-  - [ ] Oracle Cloud Infrastructure (OCI) Registry format
-  - [ ] Direct GGUF file loading without Ollama
-  - [ ] Other local model formats
+### Hardware Support
+- [x] **NVIDIA GPUs** - Support for NVIDIA GPUs
+- [ ] **AMD GPUs** - Support for AMD GPUs (ROCm)  --> Need help from AMD users! Contributions are welcome!
+
+### Model Discovery Support
+- [x] **HuggingFace Model Support** - Discover and serve models from HuggingFace Hub
+- [x] **Custom Model Directories** - Support for custom model directories
+- [x] **Ollama Model Support** - Discover and serve GGUF models from Ollama directories (experimental)
+- [x] **GGUF file loading** - Support for direct GGUF file loading
+- [x] **Model Manifest Support** - Map custom models in vLLM CLI native way with `models_manifest.json`
+- [ ] **Oracle Cloud Infrastructure (OCI) Registry** - Support for OCI Registry format
+
 
 ### Future Enhancements
 
