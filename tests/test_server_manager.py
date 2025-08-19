@@ -188,7 +188,15 @@ class TestServerProcess:
 
         process._active_servers.extend([mock_server1, mock_server2])
 
-        process.cleanup_servers_on_exit()
+        # Mock ConfigManager to ensure cleanup is enabled
+        with patch("vllm_cli.config.ConfigManager") as mock_config_manager:
+            mock_cm_instance = Mock()
+            mock_cm_instance.get_server_defaults.return_value = {
+                "cleanup_on_exit": True
+            }
+            mock_config_manager.return_value = mock_cm_instance
+
+            process.cleanup_servers_on_exit()
 
         mock_server1.stop.assert_called_once()
         mock_server2.stop.assert_called_once()
@@ -204,8 +212,17 @@ class TestServerProcess:
 
         process._active_servers.append(mock_server)
 
-        # Should not raise exception
-        process.cleanup_servers_on_exit()
+        # Mock ConfigManager to ensure cleanup is enabled
+        with patch("vllm_cli.config.ConfigManager") as mock_config_manager:
+            mock_cm_instance = Mock()
+            mock_cm_instance.get_server_defaults.return_value = {
+                "cleanup_on_exit": True
+            }
+            mock_config_manager.return_value = mock_cm_instance
+
+            # Should not raise exception
+            process.cleanup_servers_on_exit()
+
         mock_server.stop.assert_called_once()
 
     def test_register_server(self):
