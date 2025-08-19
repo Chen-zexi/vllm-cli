@@ -5,20 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.4rc1] - 2025-08-18
+## [0.2.4rc1] - 2025-08-19
 
 ### Added
+- **Shortcuts System**: New shortcuts feature for saving and quickly launching model + profile combinations
+  - Save frequently used configurations as named shortcuts
+  - Quick launch from CLI: `vllm-cli serve --shortcut NAME`
+  - Manage shortcuts through interactive mode or CLI commands
+  - Import/export shortcuts for sharing configurations
 - **Ollama Model Support**: Full integration with Ollama-downloaded models through hf-model-tool
   - Automatic discovery of Ollama models in user (`~/.ollama`) and system (`/usr/share/ollama`) directories
   - GGUF format detection and experimental serving support
+- **Enhanced Quick Serve Menu**: Quick Serve now shows both last configuration and saved shortcuts
 
 ### Changed
 - Model cache refresh properly respects TTL settings (>60s)
 - Improved path display in model management UI for better clarity
+- Configuration management is now more intuitive with clear separation between profiles (templates) and shortcuts (ready-to-run combinations)
 
 ### Fixed
 - Fixed duplicate Ollama models appearing in model list
 - Fixed manual cache refresh not working
+- Clarified configuration management workflow based on user feedback
 
 
 ## [v0.2.3] - 2025-08-17

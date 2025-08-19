@@ -138,8 +138,55 @@ class TestCLIParser:
             parser.parse_args(["invalid-command"])
 
     def test_serve_requires_model(self):
-        """Test that serve command requires model argument."""
+        """Test that serve command accepts optional model argument."""
         parser = create_parser()
 
-        with pytest.raises(SystemExit):
-            parser.parse_args(["serve"])  # Missing model
+        # Model is now optional (can use --shortcut instead)
+        args = parser.parse_args(["serve"])
+        assert args.command == "serve"
+        assert args.model is None  # Model can be None when using shortcuts
+
+    def test_serve_with_shortcut(self):
+        """Test serve command with shortcut option."""
+        parser = create_parser()
+
+        # Test with shortcut only (no model needed)
+        args = parser.parse_args(["serve", "--shortcut", "my-shortcut"])
+        assert args.command == "serve"
+        assert args.model is None
+        assert args.shortcut == "my-shortcut"
+
+        # Test with both model and shortcut (model takes precedence)
+        args = parser.parse_args(["serve", "gpt2", "--shortcut", "my-shortcut"])
+        assert args.command == "serve"
+        assert args.model == "gpt2"
+        assert args.shortcut == "my-shortcut"
+
+        # Test save-shortcut option
+        args = parser.parse_args(["serve", "gpt2", "--save-shortcut", "new-shortcut"])
+        assert args.command == "serve"
+        assert args.model == "gpt2"
+        assert args.save_shortcut == "new-shortcut"
+
+    def test_shortcuts_command(self):
+        """Test shortcuts command and its options."""
+        parser = create_parser()
+
+        # Test basic shortcuts command
+        args = parser.parse_args(["shortcuts"])
+        assert args.command == "shortcuts"
+
+        # Test shortcuts with delete option
+        args = parser.parse_args(["shortcuts", "--delete", "my-shortcut"])
+        assert args.command == "shortcuts"
+        assert args.delete == "my-shortcut"
+
+        # Test shortcuts with export option
+        args = parser.parse_args(["shortcuts", "--export", "my-shortcut"])
+        assert args.command == "shortcuts"
+        assert args.export == "my-shortcut"
+
+        # Test shortcuts with import option
+        args = parser.parse_args(["shortcuts", "--import", "shortcut.json"])
+        assert args.command == "shortcuts"
+        assert args.import_file == "shortcut.json"

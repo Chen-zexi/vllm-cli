@@ -45,13 +45,14 @@ def create_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(
         dest="command",
         help="Available commands",
-        metavar="{serve,info,models,status,stop}",
+        metavar="{serve,info,models,shortcuts,status,stop,dirs}",
     )
 
     # Add individual command parsers
     _add_serve_parser(subparsers)
     _add_info_parser(subparsers)
     _add_models_parser(subparsers)
+    _add_shortcuts_parser(subparsers)
     _add_status_parser(subparsers)
     _add_stop_parser(subparsers)
     _add_dirs_parser(subparsers)
@@ -67,8 +68,12 @@ def _add_serve_parser(subparsers) -> None:
         description="Start a vLLM server with the specified model and configuration",
     )
 
-    # Required positional argument
-    serve_parser.add_argument("model", help="Model name or path to serve")
+    # Model argument (required unless using --shortcut)
+    serve_parser.add_argument(
+        "model",
+        nargs="?",
+        help="Model name or path to serve (not needed with --shortcut)",
+    )
 
     # Configuration options
     serve_parser.add_argument(
@@ -150,6 +155,15 @@ def _add_serve_parser(subparsers) -> None:
         "--save-profile", help="Save current configuration as a profile with this name"
     )
 
+    serve_parser.add_argument(
+        "--shortcut", help="Use a saved shortcut configuration by name"
+    )
+
+    serve_parser.add_argument(
+        "--save-shortcut",
+        help="Save current configuration as a shortcut with this name",
+    )
+
 
 def _add_info_parser(subparsers) -> None:
     """Add the 'info' subcommand parser."""
@@ -161,6 +175,23 @@ def _add_info_parser(subparsers) -> None:
 
     info_parser.add_argument(
         "--json", action="store_true", help="Output in JSON format"
+    )
+
+
+def _add_shortcuts_parser(subparsers) -> None:
+    """Add the 'shortcuts' subcommand parser."""
+    shortcuts_parser = subparsers.add_parser(
+        "shortcuts",
+        help="List and manage shortcuts",
+        description="List all saved shortcuts (model + profile combinations)",
+    )
+
+    shortcuts_parser.add_argument("--delete", help="Delete a shortcut by name")
+
+    shortcuts_parser.add_argument("--export", help="Export a shortcut to a JSON file")
+
+    shortcuts_parser.add_argument(
+        "--import", dest="import_file", help="Import a shortcut from a JSON file"
     )
 
 

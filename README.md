@@ -160,6 +160,15 @@ vllm-cli serve MODEL_NAME --profile standard
 # Serve with custom parameters
 vllm-cli serve MODEL_NAME --quantization awq --tensor-parallel-size 2
 
+# Create and use shortcuts for quick launching
+vllm-cli serve MODEL --profile high_throughput --save-shortcut "my-fast-model"
+vllm-cli serve --shortcut "my-fast-model"
+
+# Manage shortcuts
+vllm-cli shortcuts                     # List all shortcuts
+vllm-cli shortcuts --delete NAME       # Delete a shortcut
+vllm-cli shortcuts --export NAME       # Export shortcut to file
+
 # List available models
 vllm-cli models
 
@@ -179,7 +188,13 @@ vllm-cli stop --port 8000
 
 - **Main Config**: `~/.config/vllm-cli/config.yaml`
 - **User Profiles**: `~/.config/vllm-cli/user_profiles.json`
+- **Shortcuts**: `~/.config/vllm-cli/shortcuts.json`
 - **Cache**: `~/.config/vllm-cli/cache.json`
+
+### Shortcuts vs Profiles
+
+- **Profiles**: Reusable server configuration templates (model-agnostic)
+- **Shortcuts**: Saved combinations of specific model + profile for quick launching
 
 ### Built-in Profiles
 

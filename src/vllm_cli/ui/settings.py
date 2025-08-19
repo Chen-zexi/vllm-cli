@@ -13,6 +13,7 @@ from ..ui.progress_styles import get_progress_bar, list_available_styles
 from .common import console
 from .navigation import unified_prompt
 from .profiles import manage_profiles
+from .shortcuts import manage_shortcuts
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,7 @@ def handle_settings() -> str:
     """
     while True:
         settings_options = [
+            "Manage Shortcuts",
             "Manage Profiles",
             "Model Directories",
             "Server Defaults",
@@ -37,6 +39,8 @@ def handle_settings() -> str:
 
         if action == "← Back" or action == "BACK" or not action:
             return "continue"
+        elif action == "Manage Shortcuts":
+            manage_shortcuts()
         elif action == "Manage Profiles":
             manage_profiles()
         elif action == "Model Directories":

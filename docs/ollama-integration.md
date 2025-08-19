@@ -46,6 +46,7 @@ The following GGUF model architectures are **NOT** supported by vLLM as of v0.8.
 | Architecture | Example Models | Issue | Status |
 |-------------|---------------|-------|--------|
 | `qwen3moe` | qwen3:30b, Qwen3 MoE variants | [#18382](https://github.com/vllm-project/vllm/issues/18382) | Not supported |
+| `llama4` | Llama 4 models | Not yet implemented | Not supported |
 
 **Note**: Regular Qwen3 models (non-MoE) in GGUF format may work. Always check the latest vLLM documentation for current support status.
 
@@ -114,9 +115,16 @@ vllm serve /home/user/.ollama/models/blobs/sha256-{hash} --quantization gguf --g
 
 ### Unsupported Architecture Error
 
-If you see an error like:
+If you see errors like:
 ```
 The checkpoint you are trying to load has model type `qwen3moe` but Transformers does not recognize this architecture
+```
+
+Or:
+```
+✗ Failed to start server
+pydantic_core._pydantic_core.ValidationError: 1 validation error for ModelConfig
+  Value error, GGUF model with architecture llama4 is not supported yet.
 ```
 
 This means the GGUF model architecture is not supported by vLLM. Solutions:

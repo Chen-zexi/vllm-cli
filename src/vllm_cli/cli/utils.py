@@ -16,6 +16,7 @@ from .handlers import (
     handle_info,
     handle_models,
     handle_serve,
+    handle_shortcuts,
     handle_status,
     handle_stop,
 )
@@ -44,6 +45,7 @@ def handle_cli_command(args: argparse.Namespace) -> bool:
             "serve": handle_serve,
             "info": handle_info,
             "models": handle_models,
+            "shortcuts": handle_shortcuts,
             "status": handle_status,
             "stop": handle_stop,
             "dirs": handle_dirs,

@@ -31,32 +31,90 @@ logger = logging.getLogger(__name__)
 
 def handle_quick_serve() -> str:
     """
-    Quick serve with the last used configuration.
+    Quick serve with shortcuts or last used configuration.
     """
-    config_manager = ConfigManager()
-    last_config = config_manager.get_last_config()
+    from .shortcuts import serve_with_shortcut
 
-    if not last_config:
-        console.print("[yellow]No previous configuration found.[/yellow]")
-        console.print(
-            "Please use 'Serve with Profile' or 'Custom Configuration' first."
-        )
+    config_manager = ConfigManager()
+
+    # Build quick serve options
+    options = []
+
+    # Add last config if available
+    last_config = config_manager.get_last_config()
+    if last_config:
+        model_name = last_config.get("model", "unknown")
+        if isinstance(model_name, dict):
+            model_name = model_name.get("model", "unknown")
+        # Truncate long model names
+        if len(str(model_name)) > 40:
+            model_display = "..." + str(model_name)[-37:]
+        else:
+            model_display = str(model_name)
+        options.append(f"Last Config: {model_display}")
+
+    # Add shortcuts
+    shortcuts = config_manager.get_recent_shortcuts(5)  # Show up to 5 recent shortcuts
+    if not shortcuts:
+        # If no recent shortcuts, show all shortcuts
+        shortcuts = config_manager.list_shortcuts()[:10]  # Limit to 10 for menu
+
+    if shortcuts:
+        if options:  # If we have last config, add separator
+            options.append("───────── Shortcuts ─────────")
+        for shortcut in shortcuts:
+            name = shortcut["name"]
+            model = shortcut["model"]
+            profile = shortcut["profile"]
+            # Truncate long model names
+            if len(str(model)) > 30:
+                model_display = "..." + str(model)[-27:]
+            else:
+                model_display = str(model)
+            options.append(f"{name}: {model_display} [{profile}]")
+
+    # If no options available
+    if not options:
+        console.print("[yellow]No quick serve options available.[/yellow]")
+        console.print("Please create shortcuts or use 'Serve with Profile' first.")
         input("\nPress Enter to continue...")
         return "continue"
 
-    # Apply dynamic defaults for display
-    profile_manager = config_manager.profile_manager
-    config_with_defaults = profile_manager.apply_dynamic_defaults(last_config)
+    # Show quick serve menu
+    console.print("\n[bold cyan]Quick Serve Options[/bold cyan]")
+    selected = unified_prompt(
+        "quick_serve", "Select configuration to launch", options, allow_back=True
+    )
 
-    # Show last configuration
-    console.print("\n[bold cyan]Last Configuration:[/bold cyan]")
-    display_config(config_with_defaults)
+    if selected == "BACK" or not selected:
+        return "continue"
 
-    # Confirm
-    confirm = inquirer.confirm("Start server with this configuration?", default=True)
+    # Handle selection
+    if selected.startswith("Last Config:"):
+        # Serve with last config
+        # Apply dynamic defaults for display
+        profile_manager = config_manager.profile_manager
+        config_with_defaults = profile_manager.apply_dynamic_defaults(last_config)
 
-    if confirm:
-        return start_server_with_config(config_with_defaults)
+        # Show last configuration
+        console.print("\n[bold cyan]Last Configuration:[/bold cyan]")
+        display_config(config_with_defaults)
+
+        # Confirm
+        confirm = inquirer.confirm(
+            "Start server with this configuration?", default=True
+        )
+
+        if confirm:
+            return start_server_with_config(config_with_defaults)
+
+    elif (
+        ":" in selected and "[" in selected and not selected.startswith("Last Config:")
+    ):
+        # Extract shortcut name from the selection
+        # Format is "ShortcutName: model [profile]"
+        shortcut_name = selected.split(":")[0].strip()
+        return serve_with_shortcut(shortcut_name)
 
     return "continue"
 
@@ -225,9 +283,14 @@ def handle_custom_config() -> str:
             config["extra_args"] = extra_args
             console.print(f"[green]Custom arguments: {extra_args}[/green]")
 
-    # Ask about saving as profile
-    save_profile = input("\nSave as profile for future use? (y/N): ").strip().lower()
-    if save_profile in ["y", "yes"]:
+    # Ask about saving as profile or shortcut
+    save_option = (
+        input("\nSave configuration for future use? (p)rofile, (s)hortcut, (N)o: ")
+        .strip()
+        .lower()
+    )
+
+    if save_option in ["p", "profile"]:
         profile_name = input("Profile name: ").strip()
         if profile_name:
             config_manager = ConfigManager()
@@ -243,6 +306,42 @@ def handle_custom_config() -> str:
             }
             config_manager.save_user_profile(profile_name, profile_data)
             console.print(f"[green]Profile '{profile_name}' saved.[/green]")
+
+    elif save_option in ["s", "shortcut"]:
+        # First need to save as a profile
+        console.print(
+            "\n[dim]A shortcut requires a profile. Creating profile first...[/dim]"
+        )
+        profile_name = input("Profile name for this configuration: ").strip()
+        if profile_name:
+            config_manager = ConfigManager()
+            profile_data = {
+                "name": profile_name,
+                "description": "Custom configuration",
+                "icon": "",
+                "config": config,  # Save original config without dynamic defaults
+                "lora_adapters": (
+                    lora_modules if lora_modules else None
+                ),  # Save LoRA adapter info if present
+            }
+            config_manager.save_user_profile(profile_name, profile_data)
+            console.print(f"[green]Profile '{profile_name}' saved.[/green]")
+
+            # Now create the shortcut
+            shortcut_name = input("\nShortcut name: ").strip()
+            if shortcut_name:
+                shortcut_data = {
+                    "model": model,
+                    "profile": profile_name,
+                    "description": f"Custom config for {model}",
+                }
+                if config_manager.save_shortcut(shortcut_name, shortcut_data):
+                    console.print(f"[green]Shortcut '{shortcut_name}' created![/green]")
+                    console.print(
+                        f'You can now quickly launch this with: vllm-cli serve --shortcut "{shortcut_name}"'
+                    )
+                else:
+                    console.print("[red]Failed to create shortcut.[/red]")
 
     # Start server
     confirm = inquirer.confirm("Start server with this configuration?", default=True)

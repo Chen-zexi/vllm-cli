@@ -38,7 +38,7 @@ def show_main_menu() -> str:
 
     menu_options.extend(
         [
-            "Quick Serve (Last Config)",
+            "Quick Serve",
             "Serve with Profile",
             "Custom Configuration",
             "Model Management",
@@ -54,7 +54,7 @@ def show_main_menu() -> str:
         return "quit"
 
     # Handle menu selections
-    if action == "Quick Serve (Last Config)":
+    if action == "Quick Serve":
         return handle_quick_serve()
     elif action == "Serve with Profile":
         return handle_serve_with_profile()

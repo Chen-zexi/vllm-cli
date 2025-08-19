@@ -14,6 +14,7 @@ from ..validation import create_compatibility_validator, create_vllm_validation_
 from .persistence import PersistenceManager
 from .profiles import ProfileManager
 from .schemas import SchemaManager
+from .shortcuts import ShortcutManager
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,7 @@ class ConfigManager:
         self.schema_manager = SchemaManager()
         self.profile_manager = ProfileManager(self.config_dir)
         self.persistence_manager = PersistenceManager()
+        self.shortcut_manager = ShortcutManager(self.config_dir)
 
         # Initialize validation system
         self.validation_registry = create_vllm_validation_registry()
@@ -389,3 +391,28 @@ class ConfigManager:
         """Save UI preferences."""
         self.config["ui_preferences"] = preferences
         self._save_config()
+
+    # Shortcut management methods
+    def get_all_shortcuts(self) -> Dict[str, Dict[str, Any]]:
+        """Get all shortcuts."""
+        return self.shortcut_manager.get_all_shortcuts()
+
+    def get_shortcut(self, name: str) -> Optional[Dict[str, Any]]:
+        """Get a specific shortcut by name."""
+        return self.shortcut_manager.get_shortcut(name)
+
+    def save_shortcut(self, name: str, shortcut_data: Dict[str, Any]) -> bool:
+        """Save or update a shortcut."""
+        return self.shortcut_manager.save_shortcut(name, shortcut_data)
+
+    def delete_shortcut(self, name: str) -> bool:
+        """Delete a shortcut."""
+        return self.shortcut_manager.delete_shortcut(name)
+
+    def list_shortcuts(self) -> List[Dict[str, Any]]:
+        """List all shortcuts with summary information."""
+        return self.shortcut_manager.list_shortcuts()
+
+    def get_recent_shortcuts(self, limit: int = 5) -> List[Dict[str, Any]]:
+        """Get recently used shortcuts."""
+        return self.shortcut_manager.get_recent_shortcuts(limit)

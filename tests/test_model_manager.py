@@ -39,8 +39,8 @@ class TestModelCache:
         # Should be available immediately
         assert cache.get_cached_models() is not None
 
-        # Wait for expiry
-        time.sleep(0.15)
+        # Wait for expiry (with small buffer for timing precision)
+        time.sleep(0.2)
 
         # Should be expired
         assert cache.get_cached_models() is None

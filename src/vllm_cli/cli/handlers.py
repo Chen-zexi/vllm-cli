@@ -50,8 +50,51 @@ def handle_serve(args: argparse.Namespace) -> bool:
     try:
         config_manager = ConfigManager()
 
-        # Build configuration from arguments
-        config = _build_serve_config(args, config_manager)
+        # Validate that either model or shortcut is provided
+        if not args.model and not (hasattr(args, "shortcut") and args.shortcut):
+            console.print(
+                "[red]Error: Either MODEL or --shortcut must be specified.[/red]"
+            )
+            console.print("Usage: vllm-cli serve MODEL [options]")
+            console.print("   or: vllm-cli serve --shortcut SHORTCUT_NAME [options]")
+            return False
+
+        # Handle shortcut mode
+        if hasattr(args, "shortcut") and args.shortcut:
+            shortcut = config_manager.get_shortcut(args.shortcut)
+            if not shortcut:
+                console.print(f"[red]Shortcut '{args.shortcut}' not found.[/red]")
+                console.print("Use 'vllm-cli shortcuts' to list available shortcuts.")
+                return False
+
+            # Get profile configuration
+            profile = config_manager.get_profile(shortcut["profile"])
+            if not profile:
+                console.print(
+                    f"[red]Profile '{shortcut['profile']}' referenced by shortcut not found.[/red]"
+                )
+                return False
+
+            # Build config from shortcut
+            config = profile.get("config", {}).copy()
+            config["model"] = shortcut["model"]
+
+            # Apply any config overrides from shortcut
+            if "config_overrides" in shortcut:
+                config.update(shortcut["config_overrides"])
+
+            # Override model in args for display purposes
+            args.model = shortcut["model"]
+
+            # Update last used timestamp
+            config_manager.shortcut_manager.update_last_used(args.shortcut)
+
+            console.print(f"[cyan]Using shortcut: {args.shortcut}[/cyan]")
+            console.print(f"  Model: {shortcut['model']}")
+            console.print(f"  Profile: {shortcut['profile']}")
+        else:
+            # Build configuration from arguments
+            config = _build_serve_config(args, config_manager)
 
         # Validate configuration
         is_valid, errors = config_manager.validate_config(config)
@@ -77,6 +120,40 @@ def handle_serve(args: argparse.Namespace) -> bool:
             }
             config_manager.save_user_profile(args.save_profile, profile_data)
             console.print(f"[green]Saved profile: {args.save_profile}[/green]")
+
+        # Save shortcut if requested
+        if hasattr(args, "save_shortcut") and args.save_shortcut:
+            # Need a profile for the shortcut
+            if args.profile:
+                profile_name = args.profile
+            elif args.save_profile:
+                profile_name = args.save_profile
+            else:
+                console.print(
+                    "[yellow]Creating default profile for shortcut...[/yellow]"
+                )
+                profile_name = f"config_{args.model.replace('/', '_')}"
+                profile_data = {
+                    "name": profile_name,
+                    "description": f"Auto-generated profile for {args.model}",
+                    "config": config,
+                }
+                config_manager.save_user_profile(profile_name, profile_data)
+
+            shortcut_data = {
+                "model": args.model,
+                "profile": profile_name,
+                "description": f"Shortcut for {args.model}",
+            }
+            if config_manager.save_shortcut(args.save_shortcut, shortcut_data):
+                console.print(f"[green]Saved shortcut: {args.save_shortcut}[/green]")
+                console.print(
+                    f"Use 'vllm-cli serve --shortcut \"{args.save_shortcut}\"' to run it."
+                )
+            else:
+                console.print(
+                    f"[red]Failed to save shortcut: {args.save_shortcut}[/red]"
+                )
 
         # Create and start server
         server = VLLMServer(config)
@@ -223,6 +300,113 @@ def handle_models() -> bool:
     except Exception as e:
         logger.exception(f"Error in models command: {e}")
         console.print(f"[red]Error listing models: {e}[/red]")
+        return False
+
+
+def handle_shortcuts(args) -> bool:
+    """
+    Handle the 'shortcuts' command to list and manage shortcuts.
+
+    Args:
+        args: Parsed command line arguments
+
+    Returns:
+        True if operation was successful
+    """
+    try:
+        from pathlib import Path
+
+        config_manager = ConfigManager()
+
+        # Handle delete operation
+        if hasattr(args, "delete") and args.delete:
+            if config_manager.delete_shortcut(args.delete):
+                console.print(f"[green]✓ Shortcut '{args.delete}' deleted.[/green]")
+            else:
+                console.print(f"[red]Shortcut '{args.delete}' not found.[/red]")
+            return True
+
+        # Handle export operation
+        if hasattr(args, "export") and args.export:
+            shortcut = config_manager.get_shortcut(args.export)
+            if not shortcut:
+                console.print(f"[red]Shortcut '{args.export}' not found.[/red]")
+                return False
+
+            file_path = Path(f"shortcut_{args.export}.json")
+            if config_manager.shortcut_manager.export_shortcut(args.export, file_path):
+                console.print(f"[green]✓ Shortcut exported to {file_path}[/green]")
+            else:
+                console.print("[red]Failed to export shortcut.[/red]")
+            return True
+
+        # Handle import operation
+        if hasattr(args, "import_file") and args.import_file:
+            file_path = Path(args.import_file)
+            if not file_path.exists():
+                console.print(f"[red]File not found: {args.import_file}[/red]")
+                return False
+
+            try:
+                if config_manager.shortcut_manager.import_shortcut(file_path):
+                    console.print("[green]✓ Shortcut imported successfully![/green]")
+                else:
+                    console.print("[red]Failed to import shortcut.[/red]")
+            except Exception as e:
+                console.print(f"[red]Error importing shortcut: {e}[/red]")
+                return False
+            return True
+
+        # Default: List all shortcuts
+        shortcuts = config_manager.list_shortcuts()
+
+        if not shortcuts:
+            console.print("\n[yellow]No shortcuts configured.[/yellow]")
+            console.print(
+                "\nCreate shortcuts to quickly launch frequently used configurations:"
+            )
+            console.print(
+                "  • From CLI: vllm-cli serve MODEL --profile PROFILE --save-shortcut NAME"
+            )
+            console.print("  • From interactive mode: Settings → Manage Shortcuts")
+            return True
+
+        # Create table
+        table = Table(
+            title=f"[bold cyan]Configured Shortcuts ({len(shortcuts)})[/bold cyan]"
+        )
+        table.add_column("Shortcut", style="cyan", no_wrap=True)
+        table.add_column("Model", style="green")
+        table.add_column("Profile", style="magenta")
+        table.add_column("Description", style="dim")
+
+        for shortcut in shortcuts:
+            model = shortcut["model"]
+            # Truncate long model paths
+            if len(model) > 40:
+                model_display = "..." + model[-37:]
+            else:
+                model_display = model
+
+            table.add_row(
+                shortcut["name"],
+                model_display,
+                shortcut["profile"],
+                shortcut.get("description", ""),
+            )
+
+        console.print("")
+        console.print(table)
+        console.print("\n[dim]Usage:[/dim]")
+        console.print("  • Launch: vllm-cli serve --shortcut SHORTCUT_NAME")
+        console.print("  • Delete: vllm-cli shortcuts --delete SHORTCUT_NAME")
+        console.print("  • Export: vllm-cli shortcuts --export SHORTCUT_NAME")
+
+        return True
+
+    except Exception as e:
+        logger.exception(f"Error in shortcuts command: {e}")
+        console.print(f"[red]Error managing shortcuts: {e}[/red]")
         return False
 
 

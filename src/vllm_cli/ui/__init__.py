@@ -20,6 +20,7 @@ from .server_control import (
 )
 from .server_monitor import monitor_active_servers, monitor_server
 from .settings import configure_server_defaults, handle_settings
+from .shortcuts import manage_shortcuts, serve_with_shortcut
 from .system_info import show_system_info
 
 # Import main UI functions for external use
@@ -40,12 +41,14 @@ __all__ = [
     # Model management
     "select_model",
     "handle_model_management",
-    "show_model_details",
     # System info
     "show_system_info",
     # Profile management
     "manage_profiles",
     "create_custom_profile",
+    # Shortcuts
+    "manage_shortcuts",
+    "serve_with_shortcut",
     # Settings
     "handle_settings",
     "configure_server_defaults",
