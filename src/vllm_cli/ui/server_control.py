@@ -54,10 +54,19 @@ def handle_quick_serve() -> str:
         options.append(f"Last Config: {model_display}")
 
     # Add shortcuts
-    shortcuts = config_manager.get_recent_shortcuts(5)  # Show up to 5 recent shortcuts
-    if not shortcuts:
-        # If no recent shortcuts, show all shortcuts
-        shortcuts = config_manager.list_shortcuts()[:10]  # Limit to 10 for menu
+    # Get recent shortcuts first (those with last_used timestamps)
+    recent_shortcuts = config_manager.get_recent_shortcuts(5)
+
+    # If we have fewer than 5 recent shortcuts, supplement with unused ones
+    if len(recent_shortcuts) < 5:
+        all_shortcuts = config_manager.list_shortcuts()
+        # Filter out the ones we already have in recent
+        recent_names = {s["name"] for s in recent_shortcuts}
+        unused_shortcuts = [s for s in all_shortcuts if s["name"] not in recent_names]
+        # Add unused shortcuts to fill up to 10 total
+        shortcuts = recent_shortcuts + unused_shortcuts[: 10 - len(recent_shortcuts)]
+    else:
+        shortcuts = recent_shortcuts
 
     if shortcuts:
         if options:  # If we have last config, add separator
