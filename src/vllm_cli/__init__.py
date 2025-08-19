@@ -10,8 +10,8 @@ from importlib.metadata import PackageNotFoundError, version
 try:
     __version__ = version("vllm-cli")
 except PackageNotFoundError:
-    # Fallback for development/editable installs
-    __version__ = "0.1.1-dev"
+    # Fallback for unknown version
+    __version__ = "unknown"
 
 __author__ = "vLLM CLI Contributors"
 

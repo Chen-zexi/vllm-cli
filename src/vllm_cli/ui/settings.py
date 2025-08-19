@@ -26,6 +26,7 @@ def handle_settings() -> str:
         settings_options = [
             "Manage Shortcuts",
             "Manage Profiles",
+            "Universal Environment Variables",
             "Model Directories",
             "Server Defaults",
             "HuggingFace Token",
@@ -43,6 +44,8 @@ def handle_settings() -> str:
             manage_shortcuts()
         elif action == "Manage Profiles":
             manage_profiles()
+        elif action == "Universal Environment Variables":
+            configure_universal_environment()
         elif action == "Model Directories":
             manage_model_directories()
         elif action == "Server Defaults":
@@ -57,6 +60,55 @@ def handle_settings() -> str:
             console.print("[green]Cache cleared.[/green]")
             input("\nPress Enter to continue...")
 
+    return "continue"
+
+
+def configure_universal_environment() -> str:
+    """
+    Configure environment variables that apply universally to all servers.
+
+    These variables are applied to every server regardless of profile,
+    but can be overridden by profile-specific environment variables.
+    """
+    from .custom_config import configure_environment_variables
+
+    config_manager = ConfigManager()
+
+    console.print("\n[bold cyan]Universal Environment Variables[/bold cyan]")
+    console.print("\nThese environment variables will be applied to ALL servers.")
+    console.print(
+        "[dim]Profile-specific variables can override these settings.[/dim]\n"
+    )
+
+    # Get current universal environment
+    universal_env = config_manager.config.get("universal_environment", {})
+
+    if universal_env:
+        console.print("[bold]Current Universal Environment Variables:[/bold]")
+        for key, value in universal_env.items():
+            if "KEY" in key.upper() or "TOKEN" in key.upper():
+                console.print(f"  • {key}: <hidden>")
+            else:
+                console.print(f"  • {key}: {value}")
+        console.print("")
+    else:
+        console.print("[dim]No universal environment variables configured.\n[/dim]")
+
+    # Configure environment variables using the same UI
+    updated_env = configure_environment_variables(universal_env)
+
+    # Save to config
+    config_manager.config["universal_environment"] = updated_env
+    config_manager._save_config()
+
+    if updated_env:
+        console.print(
+            f"\n[green]✓ Saved {len(updated_env)} universal environment variable(s).[/green]"
+        )
+    else:
+        console.print("\n[green]✓ Universal environment variables cleared.[/green]")
+
+    input("\nPress Enter to continue...")
     return "continue"
 
 
@@ -262,6 +314,35 @@ def configure_server_defaults() -> str:
     defaults["log_level"] = input(
         f"Log level (info/debug/warning/error) [{defaults.get('log_level', 'info')}]: "
     ).strip() or defaults.get("log_level", "info")
+
+    # Add cleanup_on_exit setting
+    current_cleanup = defaults.get("cleanup_on_exit", True)
+    cleanup_str = "yes" if current_cleanup else "no"
+    console.print("\n[yellow]Server Cleanup on Exit:[/yellow]")
+    console.print(
+        "[dim]When enabled, all servers will be stopped when the CLI exits.[/dim]"
+    )
+    console.print(
+        "[dim]When disabled, servers will continue running in the background.[/dim]"
+    )
+
+    cleanup_input = (
+        input(f"Stop all servers on CLI exit (yes/no) [{cleanup_str}]: ")
+        .strip()
+        .lower()
+    )
+
+    if cleanup_input in ["yes", "y", "true", "1"]:
+        defaults["cleanup_on_exit"] = True
+    elif cleanup_input in ["no", "n", "false", "0"]:
+        defaults["cleanup_on_exit"] = False
+        console.print("\n[yellow]⚠ Warning:[/yellow]")
+        console.print("[dim]Servers will continue running after CLI exits.[/dim]")
+        console.print("[dim]Use 'vllm-cli status' to view active servers.[/dim]")
+        console.print(
+            "[dim]Use 'vllm-cli stop --port PORT' to stop servers manually.[/dim]"
+        )
+    # else keep current value
 
     config_manager.save_server_defaults(defaults)
     console.print("[green]Server defaults updated.[/green]")

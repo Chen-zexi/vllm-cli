@@ -109,6 +109,12 @@ def _add_serve_parser(subparsers) -> None:
         help="GPU memory utilization (0.0-1.0, default: 0.9)",
     )
 
+    # GPU selection
+    serve_parser.add_argument(
+        "--device",
+        help="GPU device IDs to use (e.g., '0' or '0,1,2' for multiple GPUs)",
+    )
+
     serve_parser.add_argument(
         "--max-model-len", type=int, help="Maximum model sequence length"
     )

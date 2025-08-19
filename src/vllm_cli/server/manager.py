@@ -101,9 +101,66 @@ class VLLMServer:
             # Open log file for writing
             self.log_file = open(self.log_path, "w", buffering=1)
 
-            # Set environment to ensure unbuffered output
+            # Start with parent environment
             env = os.environ.copy()
-            env["PYTHONUNBUFFERED"] = "1"
+            # Note: No longer forcing PYTHONUNBUFFERED=1, let user control it
+
+            # Layer 1: Apply universal environment variables from settings
+            config_manager = ConfigManager()
+            universal_env = config_manager.config.get("universal_environment", {})
+            if universal_env:
+                logger.info(
+                    f"Applying {len(universal_env)} universal environment variable(s)"
+                )
+                for key, value in universal_env.items():
+                    env[key] = str(value)
+                    # Log non-sensitive environment variables
+                    if "KEY" not in key.upper() and "TOKEN" not in key.upper():
+                        logger.debug(f"Setting universal {key}={value}")
+                    else:
+                        logger.debug(f"Setting universal {key}=<hidden>")
+
+            # Layer 2: Apply profile environment variables (override universal)
+            profile_env = self.config.get("profile_environment", {})
+            if profile_env:
+                logger.info(
+                    f"Applying {len(profile_env)} profile environment variable(s)"
+                )
+                for key, value in profile_env.items():
+                    env[key] = str(value)
+                    # Log non-sensitive environment variables
+                    if "KEY" not in key.upper() and "TOKEN" not in key.upper():
+                        logger.debug(f"Setting profile {key}={value}")
+                    else:
+                        logger.debug(f"Setting profile {key}=<hidden>")
+
+            # Handle GPU device selection via CUDA_VISIBLE_DEVICES
+            # This overrides any CUDA_VISIBLE_DEVICES from the profile
+            if self.config.get("device"):
+                device_str = str(self.config["device"])
+                env["CUDA_VISIBLE_DEVICES"] = device_str
+                logger.info(f"Setting CUDA_VISIBLE_DEVICES={device_str}")
+
+                # If using specific GPUs, adjust tensor parallel size if needed
+                device_list = [d.strip() for d in device_str.split(",")]
+                num_devices = len(device_list)
+
+                # Check if tensor_parallel_size is set and compatible
+                if self.config.get("tensor_parallel_size"):
+                    tp_size = self.config["tensor_parallel_size"]
+                    if tp_size > num_devices:
+                        logger.warning(
+                            f"tensor_parallel_size ({tp_size}) > number of selected devices ({num_devices}). "
+                            f"Adjusting tensor_parallel_size to {num_devices}"
+                        )
+                        self.config["tensor_parallel_size"] = num_devices
+                    elif num_devices % tp_size != 0:
+                        logger.warning(
+                            f"Number of GPUs ({num_devices}) is not evenly divisible by "
+                            f"tensor_parallel_size ({tp_size}). This may lead to inefficient GPU utilization. "
+                            f"Consider using tensor_parallel_size of: "
+                            f"{', '.join(str(i) for i in range(1, num_devices + 1) if num_devices % i == 0)}"
+                        )
 
             # Add HuggingFace token if configured
             config_manager = ConfigManager()

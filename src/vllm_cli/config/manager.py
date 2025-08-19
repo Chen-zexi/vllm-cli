@@ -364,6 +364,7 @@ class ConfigManager:
                 "default_port": 8000,
                 "auto_restart": False,
                 "log_level": "info",
+                "cleanup_on_exit": True,  # Default to cleaning up servers on exit
             },
         )
 

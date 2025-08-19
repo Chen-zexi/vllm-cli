@@ -469,6 +469,137 @@
       "default": false,
       "cli_flag": "--disable-custom-all-reduce",
       "importance": "low"
+    },
+    "max_parallel_loading_workers": {
+      "type": "integer",
+      "category": "performance",
+      "description": "Load model in parallel batches to avoid RAM OOM",
+      "default": null,
+      "cli_flag": "--max-parallel-loading-workers",
+      "validation": {"min": 1, "max": 64},
+      "importance": "medium",
+      "hint": "Useful for large models with tensor parallelism"
+    },
+    "cpu_offload_space": {
+      "type": "float",
+      "category": "performance",
+      "description": "CPU offload space in GiB (newer than cpu-offload-gb)",
+      "default": null,
+      "cli_flag": "--cpu-offload-space",
+      "validation": {"min": 0, "max": 1000},
+      "importance": "medium",
+      "hint": "Virtual GPU memory extension using CPU RAM"
+    },
+    "enable_sleep_mode": {
+      "type": "boolean",
+      "category": "optimization",
+      "description": "Enable sleep mode for CUDA power saving",
+      "default": false,
+      "cli_flag": "--enable-sleep-mode",
+      "importance": "low",
+      "hint": "Only supported for CUDA platform"
+    },
+    "disable_async_output_proc": {
+      "type": "boolean",
+      "category": "advanced",
+      "description": "Disable async output processing",
+      "default": false,
+      "cli_flag": "--disable-async-output-proc",
+      "importance": "low"
+    },
+    "calculate_kv_scales": {
+      "type": "boolean",
+      "category": "optimization",
+      "description": "Calculate k_scale and v_scale for FP8 KV cache",
+      "default": false,
+      "cli_flag": "--calculate-kv-scales",
+      "importance": "low",
+      "depends_on": "kv_cache_dtype"
+    },
+    "long_prefill_token_threshold": {
+      "type": "integer",
+      "category": "optimization",
+      "description": "Token threshold for long prefill requests",
+      "default": null,
+      "cli_flag": "--long-prefill-token-threshold",
+      "validation": {"min": 1, "max": 100000},
+      "importance": "low",
+      "hint": "For chunked prefill optimization"
+    },
+    "max_num_partial_prefills": {
+      "type": "integer",
+      "category": "optimization",
+      "description": "Max concurrent partial prefills for chunked prefill",
+      "default": null,
+      "cli_flag": "--max-num-partial-prefills",
+      "validation": {"min": 1, "max": 100},
+      "importance": "low",
+      "depends_on": "enable_chunked_prefill"
+    },
+    "generation_config": {
+      "type": "string",
+      "category": "advanced",
+      "description": "Path to generation config or 'auto'/'vllm'",
+      "default": "auto",
+      "cli_flag": "--generation-config",
+      "importance": "medium"
+    },
+    "generation_config_override": {
+      "type": "string",
+      "category": "advanced",
+      "description": "JSON string to override generation config",
+      "default": null,
+      "cli_flag": "--generation-config-override",
+      "importance": "low",
+      "hint": "Example: {\"temperature\": 0.5}"
+    },
+    "allowed_origins": {
+      "type": "string",
+      "category": "api",
+      "description": "CORS allowed origins (comma-separated)",
+      "default": "*",
+      "cli_flag": "--allowed-origins",
+      "importance": "medium"
+    },
+    "allowed_headers": {
+      "type": "string",
+      "category": "api",
+      "description": "CORS allowed headers (comma-separated)",
+      "default": "*",
+      "cli_flag": "--allowed-headers",
+      "importance": "low"
+    },
+    "allowed_methods": {
+      "type": "string",
+      "category": "api",
+      "description": "CORS allowed methods (comma-separated)",
+      "default": "*",
+      "cli_flag": "--allowed-methods",
+      "importance": "low"
+    },
+    "disable_frontend_multiprocessing": {
+      "type": "boolean",
+      "category": "advanced",
+      "description": "Run frontend in same process as engine",
+      "default": false,
+      "cli_flag": "--disable-frontend-multiprocessing",
+      "importance": "low"
+    },
+    "enable_auto_tool_choice": {
+      "type": "boolean",
+      "category": "api",
+      "description": "Enable automatic tool choice",
+      "default": false,
+      "cli_flag": "--enable-auto-tool-choice",
+      "importance": "low"
+    },
+    "log_config_file": {
+      "type": "string",
+      "category": "monitoring",
+      "description": "Path to logging config JSON file",
+      "default": null,
+      "cli_flag": "--log-config-file",
+      "importance": "medium"
     }
   }
 }

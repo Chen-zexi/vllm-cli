@@ -16,12 +16,16 @@ from .navigation import unified_prompt
 logger = logging.getLogger(__name__)
 
 
-def display_config(config: Dict[str, Any]) -> None:
+def display_config(config: Dict[str, Any], title: str = "Configuration") -> None:
     """
     Display configuration in a formatted table.
+
+    Args:
+        config: Configuration dictionary to display
+        title: Optional title for the table (default: "Configuration")
     """
     table = Table(
-        title="[bold green]Server Configuration[/bold green]",
+        title=f"[bold cyan]{title}[/bold cyan]",
         show_header=True,
         header_style="bold blue",
     )
@@ -48,6 +52,8 @@ def display_config(config: Dict[str, Any]) -> None:
             display_key = "Custom Arguments"
         elif key == "dtype":
             display_key = "Data Type"
+        elif key == "device":
+            display_key = "GPU Devices"
 
         table.add_row(display_key, value_str)
 

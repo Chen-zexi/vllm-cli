@@ -13,6 +13,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from .. import __version__
 from ..config import ConfigManager
 from ..models import list_available_models
 from ..server import (
@@ -225,7 +226,7 @@ def handle_info() -> bool:
 
         # Software Information
         cuda_version = get_cuda_version()
-        software_info = "vLLM CLI: 0.1.0\n"
+        software_info = f"vLLM CLI: {__version__}\n"
 
         try:
             import torch
@@ -640,6 +641,10 @@ def _build_serve_config(
         config["max_model_len"] = args.max_model_len
     if args.dtype != "auto":
         config["dtype"] = args.dtype
+
+    # Handle GPU device selection
+    if hasattr(args, "device") and args.device:
+        config["device"] = args.device
 
     # Handle LoRA adapters
     if hasattr(args, "lora") and args.lora:

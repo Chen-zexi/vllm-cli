@@ -97,10 +97,10 @@ def handle_quick_serve() -> str:
         config_with_defaults = profile_manager.apply_dynamic_defaults(last_config)
 
         # Show last configuration
-        console.print("\n[bold cyan]Last Configuration:[/bold cyan]")
-        display_config(config_with_defaults)
+        display_config(config_with_defaults, title="Last Configuration")
 
         # Confirm
+        console.print()  # Add blank line for spacing
         confirm = inquirer.confirm(
             "Start server with this configuration?", default=True
         )
@@ -164,6 +164,11 @@ def handle_serve_with_profile() -> str:
 
     config = profile.get("config", {}).copy()
 
+    # Include environment variables from the profile
+    profile_env = profile.get("environment", {})
+    if profile_env:
+        config["profile_environment"] = profile_env
+
     # If we have LoRA modules, update the config
     if model_config:
         config["model"] = model_config  # Pass the full dict with LoRA info
@@ -175,8 +180,37 @@ def handle_serve_with_profile() -> str:
     config_with_defaults = profile_manager.apply_dynamic_defaults(config)
 
     # Show configuration
-    console.print("\n[bold cyan]Configuration:[/bold cyan]")
-    display_config(config_with_defaults)
+    display_config(config_with_defaults, title="Profile Configuration")
+
+    # Get universal environment variables to show complete picture
+    universal_env = config_manager.config.get("universal_environment", {})
+
+    # Show environment variables with their sources
+    total_env_vars = {}
+    env_sources = {}
+
+    # Add universal variables
+    for key, value in universal_env.items():
+        total_env_vars[key] = value
+        env_sources[key] = "universal"
+
+    # Add/override with profile variables
+    for key, value in profile_env.items():
+        total_env_vars[key] = value
+        env_sources[key] = (
+            "profile" if key not in universal_env else "profile (overrides universal)"
+        )
+
+    # Show environment variables if present
+    if total_env_vars:
+        console.print(f"\n[cyan]Environment Variables ({len(total_env_vars)}):[/cyan]")
+        for key, value in total_env_vars.items():
+            source = env_sources[key]
+            # Hide sensitive values
+            if "KEY" in key.upper() or "TOKEN" in key.upper():
+                console.print(f"  • {key}: <hidden> [dim]({source})[/dim]")
+            else:
+                console.print(f"  • {key}: {value} [dim]({source})[/dim]")
 
     # Show LoRA adapters if present
     if lora_modules:
@@ -189,6 +223,7 @@ def handle_serve_with_profile() -> str:
             console.print(f"    Path: {path}")
 
     # Confirm and start
+    console.print()  # Add blank line for spacing
     confirm = inquirer.confirm("Start server with this configuration?", default=True)
 
     if confirm:
@@ -238,6 +273,12 @@ def handle_custom_config() -> str:
     # Use category-based configuration
     config = configure_by_categories({"model": model})
 
+    # Handle session environment variables if configured
+    session_env = config.pop("session_environment", {})
+    if session_env:
+        # Store as profile_environment for the server to use
+        config["profile_environment"] = session_env
+
     # If we have LoRA modules, update the config
     if model_config:
         config["model"] = model_config  # Pass the full dict with LoRA info
@@ -250,8 +291,18 @@ def handle_custom_config() -> str:
     config_with_defaults = profile_manager.apply_dynamic_defaults(config)
 
     # Show configuration summary
-    console.print("\n[bold cyan]Configuration Summary:[/bold cyan]")
-    display_config(config_with_defaults)
+    display_config(config_with_defaults, title="Configuration Summary")
+
+    # Show session environment variables if configured
+    if session_env:
+        console.print(
+            f"\n[cyan]Session Environment Variables ({len(session_env)}):[/cyan]"
+        )
+        for key, value in session_env.items():
+            if "KEY" in key.upper() or "TOKEN" in key.upper():
+                console.print(f"  • {key}: <hidden>")
+            else:
+                console.print(f"  • {key}: {value}")
 
     # Show LoRA adapters if present
     if lora_modules:
@@ -263,10 +314,13 @@ def handle_custom_config() -> str:
             console.print(f"  • {name} (rank={rank})")
             console.print(f"    Path: {path}")
 
-    # Option to add custom vLLM arguments
-    use_advanced = inquirer.confirm("Add custom vLLM arguments?", default=False)
+    # Option to add raw custom vLLM arguments
+    # Note: configure_by_categories already provides comprehensive configuration,
+    # so we don't need to ask about customizing further
+    console.print()  # Add blank line for spacing
+    add_raw_args = inquirer.confirm("Add raw custom vLLM arguments?", default=False)
 
-    if use_advanced:
+    if add_raw_args:
         console.print("\n[yellow]Custom vLLM Arguments[/yellow]")
         console.print(
             "Enter additional vLLM arguments exactly as you would on the command line."
@@ -283,67 +337,70 @@ def handle_custom_config() -> str:
             config["extra_args"] = extra_args
             console.print(f"[green]Custom arguments: {extra_args}[/green]")
 
-    # Ask about saving as profile or shortcut
-    save_option = (
-        input("\nSave configuration for future use? (p)rofile, (s)hortcut, (N)o: ")
-        .strip()
-        .lower()
+    # Ask about saving configuration
+    console.print()  # Add blank line for spacing
+    save_profile = inquirer.confirm(
+        "Save this configuration as a profile for future use?", default=False
     )
 
-    if save_option in ["p", "profile"]:
+    profile_name = None
+    if save_profile:
         profile_name = input("Profile name: ").strip()
         if profile_name:
             config_manager = ConfigManager()
+
+            # Extract environment variables from config (stored as profile_environment)
+            env_vars = config.pop("profile_environment", {})
+
+            # Create clean config without environment variables
+            clean_config = config.copy()
+            clean_config.pop("model", None)  # Remove model from profile
+
             profile_data = {
                 "name": profile_name,
                 "description": "Custom configuration",
                 "icon": "",
-                "config": config,  # Save original config without dynamic defaults
+                "config": clean_config,  # Save config without model and environment
+                "environment": env_vars,  # Save environment variables separately
                 "lora_adapters": (
                     lora_modules if lora_modules else None
                 ),  # Save LoRA adapter info if present
                 "api_usage_info": config.get("api_usage_info"),  # Save API usage info
             }
             config_manager.save_user_profile(profile_name, profile_data)
-            console.print(f"[green]Profile '{profile_name}' saved.[/green]")
+            console.print(f"[green]✓ Profile '{profile_name}' saved.[/green]")
+            if env_vars:
+                console.print(
+                    f"[green]  Including {len(env_vars)} environment variable(s)[/green]"
+                )
 
-    elif save_option in ["s", "shortcut"]:
-        # First need to save as a profile
-        console.print(
-            "\n[dim]A shortcut requires a profile. Creating profile first...[/dim]"
-        )
-        profile_name = input("Profile name for this configuration: ").strip()
-        if profile_name:
-            config_manager = ConfigManager()
-            profile_data = {
-                "name": profile_name,
-                "description": "Custom configuration",
-                "icon": "",
-                "config": config,  # Save original config without dynamic defaults
-                "lora_adapters": (
-                    lora_modules if lora_modules else None
-                ),  # Save LoRA adapter info if present
-            }
-            config_manager.save_user_profile(profile_name, profile_data)
-            console.print(f"[green]Profile '{profile_name}' saved.[/green]")
+            # Now ask about creating a shortcut
+            console.print()  # Add blank line for spacing
+            create_shortcut = inquirer.confirm(
+                "Create a shortcut for quick launching this model+profile combination?",
+                default=False,
+            )
 
-            # Now create the shortcut
-            shortcut_name = input("\nShortcut name: ").strip()
-            if shortcut_name:
-                shortcut_data = {
-                    "model": model,
-                    "profile": profile_name,
-                    "description": f"Custom config for {model}",
-                }
-                if config_manager.save_shortcut(shortcut_name, shortcut_data):
-                    console.print(f"[green]Shortcut '{shortcut_name}' created![/green]")
-                    console.print(
-                        f'You can now quickly launch this with: vllm-cli serve --shortcut "{shortcut_name}"'
-                    )
-                else:
-                    console.print("[red]Failed to create shortcut.[/red]")
+            if create_shortcut:
+                shortcut_name = input("Shortcut name: ").strip()
+                if shortcut_name:
+                    shortcut_data = {
+                        "model": model,
+                        "profile": profile_name,
+                        "description": f"Custom config for {model}",
+                    }
+                    if config_manager.save_shortcut(shortcut_name, shortcut_data):
+                        console.print(
+                            f"[green]✓ Shortcut '{shortcut_name}' created![/green]"
+                        )
+                        console.print(
+                            f'[dim]Quick launch: vllm-cli serve --shortcut "{shortcut_name}"[/dim]'
+                        )
+                    else:
+                        console.print("[red]Failed to create shortcut.[/red]")
 
     # Start server
+    console.print()  # Add blank line for spacing
     confirm = inquirer.confirm("Start server with this configuration?", default=True)
 
     if confirm:
@@ -671,6 +728,9 @@ def start_server_with_config(config: Dict[str, Any]) -> str:
                 console.print("[green]✓ Server stopped.[/green]")
             else:
                 console.print("[dim]Server process continues in background.[/dim]")
+                console.print(
+                    "[yellow]⚠ Warning: You will not be able to monitor server logs from vLLM CLI[/yellow]"
+                )
                 console.print(
                     f"[dim]Note: Server may still be starting up. Check port {server.port}[/dim]"
                 )

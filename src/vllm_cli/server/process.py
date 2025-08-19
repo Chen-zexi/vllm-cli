@@ -19,7 +19,27 @@ _active_servers: List["VLLMServer"] = []
 
 
 def cleanup_servers_on_exit() -> None:
-    """Clean up all active servers on program exit."""
+    """Clean up all active servers on program exit if configured to do so."""
+    # Check if cleanup is enabled
+    try:
+        from ..config import ConfigManager
+
+        config_manager = ConfigManager()
+        server_defaults = config_manager.get_server_defaults()
+        cleanup_enabled = server_defaults.get("cleanup_on_exit", True)
+
+        if not cleanup_enabled:
+            if _active_servers:
+                num_servers = len(_active_servers)
+                logger.info(
+                    f"Cleanup on exit disabled - {num_servers} server(s) still running"
+                )
+            return
+    except Exception as e:
+        # If we can't get config, default to cleanup
+        logger.warning(f"Could not read config, defaulting to cleanup: {e}")
+        cleanup_enabled = True
+
     if _active_servers:
         logger.info(f"Cleaning up {len(_active_servers)} active server(s) on exit")
         for server in _active_servers[

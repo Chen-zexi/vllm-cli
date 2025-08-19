@@ -6,7 +6,8 @@
       "name": "Standard",
       "description": "Minimal configuration with auto-detected settings",
       "icon": "",
-      "config": {}
+      "config": {},
+      "environment": {}
     },
     "moe_optimized": {
       "name": "MoE Optimized",
@@ -14,6 +15,9 @@
       "icon": "",
       "config": {
         "enable_expert_parallel": true
+      },
+      "environment": {
+        "VLLM_ENABLE_FUSED_MOE_ACTIVATION_CHUNKING": "1"
       }
     },
     "high_throughput": {
@@ -27,6 +31,9 @@
         "max_num_batched_tokens": 8192,
         "trust_remote_code": true,
         "enable_prefix_caching": true
+      },
+      "environment": {
+        "VLLM_USE_TRITON_FLASH_ATTN": "1"
       }
     },
     "low_memory": {
@@ -39,6 +46,62 @@
         "enable_chunked_prefill": false,
         "trust_remote_code": true,
         "quantization": "fp8"
+      },
+      "environment": {
+        "VLLM_CPU_KVCACHE_SPACE": "4"
+      }
+    },
+    "gpt_oss_ampere": {
+      "name": "GPT-OSS Ampere (A100)",
+      "description": "Optimized for GPT-OSS models on NVIDIA A100 GPUs",
+      "icon": "",
+      "config": {
+        "enable_expert_parallel": true,
+        "trust_remote_code": true,
+        "gpu_memory_utilization": 0.90,
+        "enable_chunked_prefill": true,
+        "enable_prefix_caching": true,
+        "async_scheduling": true
+      },
+      "environment": {
+        "VLLM_ATTENTION_BACKEND": "TRITON_ATTN_VLLM_V1",
+        "VLLM_ENABLE_FUSED_MOE_ACTIVATION_CHUNKING": "1"
+      }
+    },
+    "gpt_oss_hopper": {
+      "name": "GPT-OSS Hopper (H100/H200)",
+      "description": "Optimized for GPT-OSS models on NVIDIA H100/H200 GPUs",
+      "icon": "",
+      "config": {
+        "enable_expert_parallel": true,
+        "trust_remote_code": true,
+        "gpu_memory_utilization": 0.90,
+        "enable_chunked_prefill": true,
+        "enable_prefix_caching": true,
+        "async_scheduling": true
+      },
+      "environment": {
+        "VLLM_ENABLE_FUSED_MOE_ACTIVATION_CHUNKING": "1"
+      }
+    },
+    "gpt_oss_blackwell": {
+      "name": "GPT-OSS Blackwell (B100/B200)",
+      "description": "Optimized for GPT-OSS models on NVIDIA Blackwell GPUs",
+      "icon": "",
+      "config": {
+        "enable_expert_parallel": true,
+        "trust_remote_code": true,
+        "gpu_memory_utilization": 0.90,
+        "enable_chunked_prefill": true,
+        "enable_prefix_caching": true,
+        "async_scheduling": true
+      },
+      "environment": {
+        "VLLM_USE_TRTLLM_ATTENTION": "1",
+        "VLLM_USE_TRTLLM_DECODE_ATTENTION": "1",
+        "VLLM_USE_TRTLLM_CONTEXT_ATTENTION": "1",
+        "VLLM_USE_FLASHINFER_MXFP4_BF16_MOE": "1",
+        "VLLM_ENABLE_FUSED_MOE_ACTIVATION_CHUNKING": "1"
       }
     }
   }

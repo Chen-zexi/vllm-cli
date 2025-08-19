@@ -78,13 +78,27 @@ def main() -> NoReturn:
 
                     active_servers = get_active_servers()
 
+                    # Check cleanup settings
+                    config_manager = ConfigManager()
+                    server_defaults = config_manager.get_server_defaults()
+                    cleanup_enabled = server_defaults.get("cleanup_on_exit", True)
+
                     if active_servers:
-                        cleanup_message = (
-                            "[bold cyan]Thanks for using vLLM CLI![/bold cyan]\n\n"
-                            f"[yellow]⏳ Cleaning up {len(active_servers)} active server(s)...[/yellow]\n"
-                            "[dim white]This may take a moment for large models[/dim white]\n"
-                            "[dim white]Please wait while services are terminated gracefully[/dim white]"
-                        )
+                        if cleanup_enabled:
+                            cleanup_message = (
+                                "[bold cyan]Thanks for using vLLM CLI![/bold cyan]\n\n"
+                                f"[yellow]⏳ Cleaning up {len(active_servers)} active server(s)...[/yellow]\n"
+                                "[dim white]This may take a moment for large models[/dim white]\n"
+                                "[dim white]Please wait while services are terminated gracefully[/dim white]"
+                            )
+                        else:
+                            cleanup_message = (
+                                "[bold cyan]Thanks for using vLLM CLI![/bold cyan]\n\n"
+                                f"[yellow]ℹ {len(active_servers)} server(s) will continue running[/yellow]\n"
+                                "[dim white]Cleanup on exit is disabled in settings[/dim white]\n"
+                                "[yellow]⚠ Warning: You will not be able to monitor server logs after exit[/yellow]\n"
+                                "[dim white]Use 'vllm-cli status' to view active servers[/dim white]"
+                            )
                     else:
                         cleanup_message = (
                             "[bold cyan]Thanks for using vLLM CLI![/bold cyan]\n\n"
