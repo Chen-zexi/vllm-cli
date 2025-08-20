@@ -9,7 +9,8 @@
 A command-line interface tool for serving Large Language Models using vLLM. Provides both interactive and command-line modes with features for configuration profiles, model management, and server monitoring.
 
 ![vLLM CLI Welcome Screen](asset/welcome-screen.png)
-*Interactive terminal interface with GPU status and system overview*
+*Interactive terminal interface with GPU status and system overview*<br>
+*Tip: You can customize the GPU stats bar in settings*
 
 ## Features
 
