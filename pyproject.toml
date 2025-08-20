@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vllm-cli"
-version = "0.2.4rc2"
+version = "0.2.4"
 authors = [
     { name="Zexi Chen", email="zzxxi.chen@gmail.com" },
 ]
