@@ -405,16 +405,51 @@ class VLLMServer:
                         self.process.kill()
                         self.process.wait()
             elif hasattr(self.process, "pid"):
-                # External server - use os.kill
+                # External server - kill entire process group or individual process
                 try:
-                    os.kill(self.process.pid, signal.SIGTERM)
-                    # Wait a bit
-                    time.sleep(2)
-                    # Check if still running
-                    if self.is_running():
-                        os.kill(self.process.pid, signal.SIGKILL)
-                except (OSError, ProcessLookupError):
-                    pass  # Process already dead
+                    pgid = self.process.pid
+                    killed = False
+                    
+                    # First attempt: try to kill process group
+                    try:
+                        os.killpg(pgid, signal.SIGTERM)
+                        logger.info(f"Sent SIGTERM to process group {pgid}")
+                        killed = True
+                    except (OSError, ProcessLookupError) as e:
+                        # Process group kill failed, try individual process
+                        logger.debug(f"Process group kill failed: {e}, trying individual process")
+                        try:
+                            os.kill(self.process.pid, signal.SIGTERM)
+                            logger.info(f"Sent SIGTERM to process {self.process.pid}")
+                            killed = True
+                        except ProcessLookupError:
+                            # Process already dead
+                            logger.info(f"Process {self.process.pid} already terminated")
+                            pass
+                        except OSError as e:
+                            logger.warning(f"Failed to send SIGTERM to {self.process.pid}: {e}")
+                    
+                    if killed:
+                        # Wait for graceful shutdown
+                        time.sleep(2)
+                        
+                        # Check if still running and force kill if needed
+                        if self.is_running():
+                            try:
+                                os.killpg(pgid, signal.SIGKILL)
+                                logger.info(f"Force killed process group {pgid}")
+                            except (OSError, ProcessLookupError):
+                                # Process group kill failed, try individual
+                                try:
+                                    os.kill(self.process.pid, signal.SIGKILL)
+                                    logger.info(f"Force killed process {self.process.pid}")
+                                except ProcessLookupError:
+                                    pass  # Already dead
+                                except OSError as e:
+                                    logger.error(f"Failed to force kill {self.process.pid}: {e}")
+                                    
+                except Exception as e:
+                    logger.error(f"Unexpected error stopping external server: {e}")
 
             # Close log file if we have one
             if hasattr(self, "log_file") and self.log_file:

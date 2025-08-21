@@ -197,7 +197,7 @@ def monitor_proxy_overview(proxy_manager: ProxyManager) -> str:
                     "Proxy Status",
                     (
                         "[green]Running[/green]"
-                        if proxy_manager.proxy_server
+                        if proxy_manager.proxy_process and proxy_manager.proxy_process.is_running()
                         else "[red]Stopped[/red]"
                     ),
                 )
@@ -210,7 +210,7 @@ def monitor_proxy_overview(proxy_manager: ProxyManager) -> str:
                     create_panel(
                         proxy_status,
                         title="Proxy Server",
-                        border_style="green" if proxy_manager.proxy_server else "red",
+                        border_style="green" if proxy_manager.proxy_process and proxy_manager.proxy_process.is_running() else "red",
                     )
                 )
 
@@ -518,7 +518,7 @@ def show_proxy_status(proxy_manager: ProxyManager):
         "Proxy Server",
         (
             "[green]Running[/green]"
-            if proxy_manager.proxy_server
+            if proxy_manager.proxy_process and proxy_manager.proxy_process.is_running()
             else "[red]Not Running[/red]"
         ),
     )
@@ -648,7 +648,7 @@ def monitor_proxy_logs(proxy_manager: ProxyManager) -> str:
         with Live(layout, console=console, refresh_per_second=monitor_refresh_rate):
             while True:
                 # Proxy server information
-                if proxy_manager.proxy_server:
+                if proxy_manager.proxy_process and proxy_manager.proxy_process.is_running():
                     proxy_table = Table(show_header=False, box=None)
                     proxy_table.add_column("Key", style="cyan")
                     proxy_table.add_column("Value", style="magenta")
@@ -657,8 +657,8 @@ def monitor_proxy_logs(proxy_manager: ProxyManager) -> str:
                         "Status",
                         (
                             "[green]Running[/green]"
-                            if proxy_manager.proxy_thread
-                            and proxy_manager.proxy_thread.is_alive()
+                            if proxy_manager.proxy_process
+                            and proxy_manager.proxy_process.is_running()
                             else "[red]Stopped[/red]"
                         ),
                     )
@@ -681,11 +681,11 @@ def monitor_proxy_logs(proxy_manager: ProxyManager) -> str:
                         ),
                     )
 
-                    # Calculate uptime if proxy server has start_time
-                    if hasattr(proxy_manager.proxy_server, "start_time"):
+                    # Calculate uptime if proxy process has start_time
+                    if proxy_manager.proxy_process and hasattr(proxy_manager.proxy_process, "start_time"):
                         uptime = (
                             time.time()
-                            - proxy_manager.proxy_server.start_time.timestamp()
+                            - proxy_manager.proxy_process.start_time.timestamp()
                         )
                         hours, remainder = divmod(int(uptime), 3600)
                         minutes, seconds = divmod(remainder, 60)
@@ -694,11 +694,8 @@ def monitor_proxy_logs(proxy_manager: ProxyManager) -> str:
                         )
 
                     # Show request statistics if available
-                    if hasattr(proxy_manager.proxy_server, "total_requests"):
-                        proxy_table.add_row(
-                            "Total Requests",
-                            str(proxy_manager.proxy_server.total_requests),
-                        )
+                    # Note: Request statistics would need to be fetched via API
+                    # For now, we'll skip this
                 else:
                     proxy_table = Table(show_header=False, box=None)
                     proxy_table.add_column("", style="red")
@@ -708,7 +705,7 @@ def monitor_proxy_logs(proxy_manager: ProxyManager) -> str:
                     create_panel(
                         proxy_table,
                         title="Proxy Server Status",
-                        border_style="green" if proxy_manager.proxy_server else "red",
+                        border_style="green" if proxy_manager.proxy_process and proxy_manager.proxy_process.is_running() else "red",
                     )
                 )
 
@@ -719,31 +716,22 @@ def monitor_proxy_logs(proxy_manager: ProxyManager) -> str:
                 backends_table.add_column("Status", style="green")
                 backends_table.add_column("Requests", style="yellow")
 
-                if proxy_manager.proxy_server and proxy_manager.proxy_server.router:
+                # Display backend information from vllm_servers
+                if proxy_manager.vllm_servers:
                     try:
-                        router = proxy_manager.proxy_server.router
-                        for model_name, backend_config in router.backends.items():
-                            # Extract URL from backend config
-                            url = (
-                                backend_config.get("url", "N/A")
-                                if isinstance(backend_config, dict)
-                                else str(backend_config)
-                            )
+                        for model_name, server in proxy_manager.vllm_servers.items():
+                            # Build URL from server info
+                            url = f"http://localhost:{server.port}"
 
-                            # Get server status
-                            server = proxy_manager.vllm_servers.get(model_name)
+                            # Server is already from the loop
                             status = (
                                 "[green]Running[/green]"
                                 if server and server.is_running()
                                 else "[red]Stopped[/red]"
                             )
 
-                            # Get request count if available
-                            request_count = (
-                                proxy_manager.proxy_server.model_requests.get(
-                                    model_name, 0
-                                )
-                            )
+                            # Request count would need to be fetched via API
+                            request_count = 0
 
                             backends_table.add_row(
                                 (
@@ -777,12 +765,12 @@ def monitor_proxy_logs(proxy_manager: ProxyManager) -> str:
                 # Display proxy server logs
                 monitor_log_lines = ui_prefs.get("log_lines_monitor", 50)
 
-                # Get recent logs from proxy server if available
+                # Get recent logs from proxy process if available
                 recent_logs = []
-                if proxy_manager.proxy_server and hasattr(
-                    proxy_manager.proxy_server, "get_recent_logs"
+                if proxy_manager.proxy_process and hasattr(
+                    proxy_manager.proxy_process, "get_recent_logs"
                 ):
-                    recent_logs = proxy_manager.proxy_server.get_recent_logs(
+                    recent_logs = proxy_manager.proxy_process.get_recent_logs(
                         monitor_log_lines
                     )
 

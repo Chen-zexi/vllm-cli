@@ -111,19 +111,42 @@ class ProxyManager:
             self.vllm_servers[model_config.name] = server
 
             # Register with proxy if it's running
-            if self.proxy_server:
-                backend_url = f"http://localhost:{model_config.port}"
-                # Register with the actual model name
-                self.proxy_server.router.add_backend(
-                    model_config.name, backend_url, model_config.dict()
-                )
-
-                # Also register any aliases
-                aliases = model_config.config_overrides.get("aliases", [])
-                for alias in aliases:
-                    self.proxy_server.router.add_backend(
-                        alias, backend_url, model_config.dict()
-                    )
+            if self.proxy_process and self.proxy_process.is_running():
+                try:
+                    import httpx
+                    
+                    # Prepare model configuration for proxy
+                    model_data = {
+                        "name": model_config.name,
+                        "port": model_config.port,
+                        "model_path": model_config.model_path,
+                        "gpu_ids": model_config.gpu_ids,
+                        **model_config.config_overrides
+                    }
+                    
+                    # Register model with proxy via HTTP API
+                    proxy_url = f"http://localhost:{self.proxy_config.port}/proxy/add_model"
+                    with httpx.Client() as client:
+                        response = client.post(proxy_url, json=model_data, timeout=5.0)
+                        if response.status_code == 200:
+                            logger.debug(f"Registered model '{model_config.name}' with proxy")
+                        else:
+                            logger.warning(
+                                f"Failed to register model with proxy: {response.text}"
+                            )
+                    
+                    # Also register any aliases
+                    aliases = model_config.config_overrides.get("aliases", [])
+                    for alias in aliases:
+                        alias_data = model_data.copy()
+                        alias_data["name"] = alias
+                        response = client.post(proxy_url, json=alias_data, timeout=5.0)
+                        if response.status_code == 200:
+                            logger.debug(f"Registered alias '{alias}' with proxy")
+                        
+                except Exception as e:
+                    logger.warning(f"Failed to register model with proxy: {e}")
+                    # Don't fail model start if proxy registration fails
 
             logger.info(
                 f"Started vLLM server for '{model_config.name}' "
@@ -158,8 +181,28 @@ class ProxyManager:
             del self.vllm_servers[model_name]
 
             # Remove from proxy if it's running
-            if self.proxy_server:
-                self.proxy_server.router.remove_backend(model_name)
+            if self.proxy_process and self.proxy_process.is_running():
+                try:
+                    import httpx
+                    
+                    # Remove model from proxy via HTTP API
+                    proxy_url = f"http://localhost:{self.proxy_config.port}/proxy/remove_model/{model_name}"
+                    with httpx.Client() as client:
+                        response = client.delete(proxy_url, timeout=5.0)
+                        if response.status_code == 200:
+                            logger.debug(f"Removed model '{model_name}' from proxy")
+                        else:
+                            logger.warning(
+                                f"Failed to remove model from proxy: {response.text}"
+                            )
+                    
+                    # Also remove any aliases
+                    # Note: We'd need to track aliases per model to remove them properly
+                    # For now, the proxy will handle orphaned aliases
+                    
+                except Exception as e:
+                    logger.warning(f"Failed to remove model from proxy: {e}")
+                    # Don't fail model stop if proxy unregistration fails
 
             logger.info(f"Stopped vLLM server for '{model_name}'")
             return True
@@ -263,7 +306,7 @@ class ProxyManager:
             Status dictionary
         """
         status = {
-            "proxy_running": self.proxy_server is not None,
+            "proxy_running": self.proxy_process and self.proxy_process.is_running(),
             "proxy_host": self.proxy_config.host,
             "proxy_port": self.proxy_config.port,
             "models": [],
@@ -368,38 +411,6 @@ class ProxyManager:
 
         return allocated_configs
 
-    def _register_running_models(self):
-        """
-        Register all running models with the proxy router.
-
-        This method is called after the proxy server starts to ensure
-        all previously started models are registered with the router.
-        """
-        if not self.proxy_server:
-            return
-
-        for model_name, server in self.vllm_servers.items():
-            if server.is_running():
-                # Find the model config for this model
-                model_config = self._get_model_config_by_name(model_name)
-                if model_config:
-                    backend_url = f"http://localhost:{model_config.port}"
-                    # Register the main model name
-                    self.proxy_server.router.add_backend(
-                        model_name, backend_url, model_config.dict()
-                    )
-                    logger.info(f"Registered model '{model_name}' with proxy router")
-
-                    # Also register any aliases
-                    aliases = model_config.config_overrides.get("aliases", [])
-                    for alias in aliases:
-                        self.proxy_server.router.add_backend(
-                            alias, backend_url, model_config.dict()
-                        )
-                        logger.info(
-                            f"Registered alias '{alias}' for model '{model_name}'"
-                        )
-
     def _get_model_config_by_name(self, model_name: str) -> Optional[ModelConfig]:
         """
         Get model configuration by model name.
@@ -447,52 +458,3 @@ class ProxyManager:
 
         return cls(proxy_config)
 
-    @property
-    def proxy_server(self):
-        """Backward compatibility property for code that references proxy_server."""
-        # Return a mock object with the attributes that monitoring code expects
-        if self.proxy_process and self.proxy_process.is_running():
-            manager = self
-
-            class ProxyServerCompat:
-                def __init__(self, process):
-                    self.process = process
-                    self.start_time = process.start_time
-                    self.total_requests = 0
-                    self.model_requests = {}
-
-                @property
-                def router(self):
-                    # Create a mock router with backends from vllm_servers
-                    class RouterCompat:
-                        @property
-                        def backends(self):
-                            result = {}
-                            for model_name, server in manager.vllm_servers.items():
-                                result[model_name] = {
-                                    "url": f"http://localhost:{server.port}",
-                                    "port": server.port,
-                                    "model_path": model_name,
-                                }
-                            return result
-
-                    return RouterCompat()
-
-                def get_recent_logs(self, n=50):
-                    return self.process.get_recent_logs(n)
-
-            return ProxyServerCompat(self.proxy_process)
-        return None
-
-    @property
-    def proxy_thread(self):
-        """Backward compatibility for proxy_thread checks."""
-        if self.proxy_process:
-            process = self.proxy_process
-
-            class ThreadCompat:
-                def is_alive(self):
-                    return process.is_running()
-
-            return ThreadCompat() if self.proxy_process.is_running() else None
-        return None
