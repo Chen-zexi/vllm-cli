@@ -16,6 +16,9 @@ from rich.table import Table
 from .. import __version__
 from ..config import ConfigManager
 from ..models import list_available_models
+from ..proxy import ProxyManager
+from ..proxy.config import ProxyConfigManager
+from ..proxy.models import ModelConfig
 from ..server import (
     VLLMServer,
     find_server_by_model,
@@ -733,3 +736,379 @@ def handle_dirs(args: argparse.Namespace) -> bool:
                 return False
 
     return True
+
+
+def handle_proxy(args: argparse.Namespace) -> bool:
+    """
+    Handle the 'proxy' command for multi-model serving.
+
+    Args:
+        args: Parsed command line arguments
+
+    Returns:
+        True if command executed successfully
+    """
+    import json
+    from pathlib import Path
+
+    # Initialize managers
+    config_manager = ProxyConfigManager()
+
+    # Handle proxy subcommands
+    if not hasattr(args, "proxy_command") or not args.proxy_command:
+        console.print("[yellow]Please specify a proxy command.[/yellow]")
+        console.print("Available commands: start, stop, status, add, remove, config")
+        return False
+
+    if args.proxy_command == "start":
+        # Start proxy server
+        console.print("[bold cyan]Starting Multi-Model Proxy Server[/bold cyan]")
+
+        # Load or create configuration
+        if hasattr(args, "config") and args.config:
+            config_path = Path(args.config)
+            if not config_path.exists():
+                console.print(f"[red]Config file not found: {config_path}[/red]")
+                return False
+            proxy_config = config_manager.load_config(config_path)
+        elif hasattr(args, "interactive") and args.interactive:
+            # Interactive configuration
+            from ..ui.proxy_control import configure_proxy_interactively
+
+            proxy_config = configure_proxy_interactively()
+            if not proxy_config:
+                return False
+        else:
+            # Use default or saved configuration
+            proxy_config = config_manager.load_config()
+
+        # Override host/port only if explicitly specified on command line
+        if hasattr(args, "host") and args.host is not None:
+            proxy_config.host = args.host
+        if hasattr(args, "port") and args.port is not None:
+            proxy_config.port = args.port
+
+        # Validate configuration
+        errors = config_manager.validate_config(proxy_config)
+        if errors:
+            console.print("[red]Configuration errors:[/red]")
+            for error in errors:
+                console.print(f"  • {error}")
+            return False
+
+        # Create proxy manager
+        proxy_manager = ProxyManager(proxy_config)
+
+        # Auto-allocate GPUs if requested
+        if hasattr(args, "auto_allocate") and args.auto_allocate:
+            console.print("[cyan]Auto-allocating GPUs to models...[/cyan]")
+            allocated = proxy_manager.allocate_gpus_automatically()
+            proxy_config.models = allocated
+
+        # Start all models
+        console.print("\n[cyan]Starting model servers...[/cyan]")
+        started = proxy_manager.start_all_models()
+        console.print(f"Started {started}/{len(proxy_config.models)} models")
+
+        # Start proxy
+        if proxy_manager.start_proxy():
+            console.print(
+                f"\n[green]✓ Proxy server running at "
+                f"http://{proxy_config.host}:{proxy_config.port}[/green]"
+            )
+            console.print("\nAvailable endpoints:")
+            console.print(
+                f"  • OpenAI API: http://{proxy_config.host}:{proxy_config.port}/v1/"
+            )
+            console.print(
+                f"  • Models list: http://{proxy_config.host}:{proxy_config.port}/v1/models"
+            )
+            console.print(
+                f"  • Proxy status: http://{proxy_config.host}:{proxy_config.port}/proxy/status"
+            )
+
+            if proxy_config.enable_metrics:
+                console.print(
+                    f"  • Metrics: http://{proxy_config.host}:{proxy_config.port}/metrics"
+                )
+
+            console.print("\n[dim]Press Ctrl+C for monitoring options[/dim]")
+
+            # Keep running with monitoring option
+            try:
+                import time
+
+                time.sleep(2)  # Give servers a moment to fully start
+
+                while True:
+                    # Show monitoring menu
+                    console.print("\n[bold cyan]Proxy Server Running[/bold cyan]")
+                    options = [
+                        "Monitor proxy (all options)",
+                        "Continue running (background)",
+                        "Stop proxy server",
+                    ]
+
+                    try:
+                        from ..ui.navigation import unified_prompt
+
+                        choice = unified_prompt(
+                            "proxy_running", "Select action", options, allow_back=False
+                        )
+
+                        if choice == "Monitor proxy (all options)":
+                            from ..proxy.monitor import monitor_proxy
+
+                            result = monitor_proxy(proxy_manager)
+                            if result == "back":
+                                continue  # Return to main proxy menu
+                        elif choice == "Continue running (background)":
+                            console.print(
+                                "\n[green]Proxy continues running in background[/green]"
+                            )
+                            console.print(
+                                f"Access at: http://{proxy_config.host}:{proxy_config.port}"
+                            )
+                            console.print(
+                                "[dim]The proxy will stop when you exit the program[/dim]"
+                            )
+                            time.sleep(2)
+                        elif choice == "Stop proxy server":
+                            console.print("\n[yellow]Stopping proxy server...[/yellow]")
+                            proxy_manager.stop_proxy()
+                            break
+
+                    except KeyboardInterrupt:
+                        # Nested Ctrl+C - ask if they want to stop
+                        console.print("\n[yellow]Interrupt received[/yellow]")
+                        if (
+                            unified_prompt(
+                                "confirm_stop",
+                                "Stop the proxy server?",
+                                ["Yes, stop proxy", "No, continue running"],
+                                allow_back=False,
+                            )
+                            == "Yes, stop proxy"
+                        ):
+                            console.print("\n[yellow]Stopping proxy server...[/yellow]")
+                            proxy_manager.stop_proxy()
+                            break
+
+            except KeyboardInterrupt:
+                console.print("\n[yellow]Stopping proxy server...[/yellow]")
+                proxy_manager.stop_proxy()
+
+            return True
+        else:
+            console.print("[red]Failed to start proxy server[/red]")
+            return False
+
+    elif args.proxy_command == "stop":
+        # Stop proxy server
+        console.print("[yellow]Stopping proxy server and all models...[/yellow]")
+        # This would need a way to find and stop the running proxy
+        # For now, we'll just inform the user
+        console.print("[dim]Use Ctrl+C in the proxy terminal to stop it[/dim]")
+        return True
+
+    elif args.proxy_command == "status":
+        # Show proxy status
+        import httpx
+
+        from ..proxy.runtime import get_proxy_connection
+
+        # Get proxy connection details dynamically
+        proxy_host, proxy_port = get_proxy_connection(
+            cli_host=getattr(args, "proxy_host", None),
+            cli_port=getattr(args, "proxy_port", None),
+        )
+
+        try:
+            # Try to connect to proxy
+            response = httpx.get(
+                f"http://{proxy_host}:{proxy_port}/proxy/status", timeout=5
+            )
+            if response.status_code == 200:
+                status = response.json()
+
+                if hasattr(args, "json") and args.json:
+                    console.print(json.dumps(status, indent=2))
+                else:
+                    # Display formatted status
+                    console.print("\n[bold cyan]Proxy Server Status[/bold cyan]")
+                    console.print("Status: [green]Running[/green]")
+                    console.print(
+                        f"Address: http://{status['proxy_host']}:{status['proxy_port']}"
+                    )
+                    console.print(f"Total Requests: {status.get('total_requests', 0)}")
+
+                    if status.get("models"):
+                        console.print("\n[bold]Active Models:[/bold]")
+                        table = Table()
+                        table.add_column("Model", style="cyan")
+                        table.add_column("Port", style="magenta")
+                        table.add_column("GPUs", style="green")
+                        table.add_column("Status", style="yellow")
+                        table.add_column("Requests", style="dim")
+
+                        for model in status["models"]:
+                            gpu_str = ",".join(str(g) for g in model.get("gpu_ids", []))
+                            table.add_row(
+                                model["name"],
+                                str(model["port"]),
+                                gpu_str or "N/A",
+                                model["status"],
+                                str(model.get("request_count", 0)),
+                            )
+
+                        console.print(table)
+                    else:
+                        console.print("\n[yellow]No models configured[/yellow]")
+            else:
+                console.print("[red]Proxy server returned error[/red]")
+
+        except httpx.ConnectError:
+            console.print(
+                f"[yellow]Proxy server is not running at {proxy_host}:{proxy_port}[/yellow]"
+            )
+            console.print("Start it with: vllm-cli proxy start")
+            console.print(
+                "[dim]Tip: Use --proxy-host and --proxy-port to specify "
+                "a different proxy server[/dim]"
+            )
+        except Exception as e:
+            console.print(f"[red]Error checking proxy status: {e}[/red]")
+
+        return True
+
+    elif args.proxy_command == "add":
+        # Add model to running proxy
+        if not all([hasattr(args, "name"), hasattr(args, "model_path")]):
+            console.print("[red]Model name and path are required[/red]")
+            return False
+
+        model_config = ModelConfig(
+            name=args.name,
+            model_path=args.model_path,
+            gpu_ids=args.gpu if hasattr(args, "gpu") and args.gpu else [],
+            port=args.port if hasattr(args, "port") and args.port else 8001,
+            profile=args.profile if hasattr(args, "profile") else None,
+        )
+
+        # Send request to proxy to add model
+        import httpx
+
+        from ..proxy.runtime import get_proxy_connection
+
+        # Get proxy connection details dynamically
+        proxy_host, proxy_port = get_proxy_connection(
+            cli_host=getattr(args, "proxy_host", None),
+            cli_port=getattr(args, "proxy_port", None),
+        )
+
+        try:
+            response = httpx.post(
+                f"http://{proxy_host}:{proxy_port}/proxy/add_model",
+                json=model_config.dict(),
+                timeout=10,
+            )
+            if response.status_code == 200:
+                console.print(
+                    f"[green]✓ Model '{args.name}' added successfully[/green]"
+                )
+            else:
+                console.print(f"[red]Failed to add model: {response.text}[/red]")
+        except httpx.ConnectError:
+            console.print(
+                f"[red]Proxy server is not running at {proxy_host}:{proxy_port}[/red]"
+            )
+        except Exception as e:
+            console.print(f"[red]Error adding model: {e}[/red]")
+
+        return True
+
+    elif args.proxy_command == "remove":
+        # Remove model from proxy
+        if not hasattr(args, "name"):
+            console.print("[red]Model name is required[/red]")
+            return False
+
+        import httpx
+
+        from ..proxy.runtime import get_proxy_connection
+
+        # Get proxy connection details dynamically
+        proxy_host, proxy_port = get_proxy_connection(
+            cli_host=getattr(args, "proxy_host", None),
+            cli_port=getattr(args, "proxy_port", None),
+        )
+
+        try:
+            response = httpx.delete(
+                f"http://{proxy_host}:{proxy_port}/proxy/remove_model/{args.name}",
+                timeout=10,
+            )
+            if response.status_code == 200:
+                console.print(f"[green]✓ Model '{args.name}' removed[/green]")
+            else:
+                console.print(f"[red]Failed to remove model: {response.text}[/red]")
+        except httpx.ConnectError:
+            console.print(
+                f"[red]Proxy server is not running at {proxy_host}:{proxy_port}[/red]"
+            )
+        except Exception as e:
+            console.print(f"[red]Error removing model: {e}[/red]")
+
+        return True
+
+    elif args.proxy_command == "config":
+        # Manage proxy configuration
+        if hasattr(args, "create") and args.create:
+            # Create example configuration
+            output_path = Path(args.create)
+            example_config = config_manager.create_example_config()
+            config_manager.save_config(example_config, output_path)
+            console.print(
+                f"[green]✓ Example configuration saved to {output_path}[/green]"
+            )
+
+        elif hasattr(args, "edit") and args.edit:
+            # Edit configuration interactively
+            from ..ui.proxy_control import edit_proxy_config
+
+            edit_proxy_config()
+
+        elif hasattr(args, "export") and args.export:
+            # Export current configuration
+            output_path = Path(args.export)
+            current_config = config_manager.load_config()
+            config_manager.export_config(current_config, output_path)
+            console.print(f"[green]✓ Configuration exported to {output_path}[/green]")
+
+        else:
+            # Show current configuration
+            current_config = config_manager.load_config()
+            console.print("\n[bold cyan]Current Proxy Configuration[/bold cyan]")
+            console.print(f"Host: {current_config.host}")
+            console.print(f"Port: {current_config.port}")
+            console.print(f"CORS Enabled: {current_config.enable_cors}")
+            console.print(f"Metrics Enabled: {current_config.enable_metrics}")
+            console.print(f"Request Logging: {current_config.log_requests}")
+
+            if current_config.models:
+                console.print(f"\nConfigured Models ({len(current_config.models)}):")
+                for model in current_config.models:
+                    status = (
+                        "[green]enabled[/green]"
+                        if model.enabled
+                        else "[dim]disabled[/dim]"
+                    )
+                    console.print(f"  • {model.name}: {model.model_path} ({status})")
+            else:
+                console.print("\n[yellow]No models configured[/yellow]")
+
+        return True
+
+    else:
+        console.print(f"[red]Unknown proxy command: {args.proxy_command}[/red]")
+        return False

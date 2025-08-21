@@ -45,11 +45,12 @@ def create_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(
         dest="command",
         help="Available commands",
-        metavar="{serve,info,models,shortcuts,status,stop,dirs}",
+        metavar="{serve,proxy,info,models,shortcuts,status,stop,dirs}",
     )
 
     # Add individual command parsers
     _add_serve_parser(subparsers)
+    _add_proxy_parser(subparsers)
     _add_info_parser(subparsers)
     _add_models_parser(subparsers)
     _add_shortcuts_parser(subparsers)
@@ -258,6 +259,161 @@ def _add_stop_parser(subparsers) -> None:
 
     stop_group.add_argument(
         "--port", type=int, help="Stop server running on specific port"
+    )
+
+
+def _add_proxy_parser(subparsers) -> None:
+    """Add the 'proxy' subcommand parser."""
+    proxy_parser = subparsers.add_parser(
+        "proxy",
+        help="Manage multi-model proxy server",
+        description="Start and manage a proxy server for serving multiple models",
+    )
+
+    # Create subcommands for proxy operations
+    proxy_subparsers = proxy_parser.add_subparsers(
+        dest="proxy_command",
+        help="Proxy management commands",
+        metavar="{start,stop,status,add,remove,config}",
+    )
+
+    # Start proxy
+    start_parser = proxy_subparsers.add_parser(
+        "start",
+        help="Start the proxy server",
+        description="Start the proxy server with configured models",
+    )
+    start_parser.add_argument(
+        "--config",
+        help="Path to proxy configuration file (YAML or JSON)",
+    )
+    start_parser.add_argument(
+        "--interactive",
+        action="store_true",
+        help="Configure proxy interactively",
+    )
+    start_parser.add_argument(
+        "--host",
+        default=None,
+        help="Proxy server host (default: 0.0.0.0)",
+    )
+    start_parser.add_argument(
+        "--port",
+        type=int,
+        default=None,
+        help="Proxy server port (default: 8000)",
+    )
+    start_parser.add_argument(
+        "--auto-allocate",
+        action="store_true",
+        help="Automatically allocate GPUs to models",
+    )
+
+    # Stop proxy
+    proxy_subparsers.add_parser(
+        "stop",
+        help="Stop the proxy server",
+        description="Stop the proxy server and all model servers",
+    )
+
+    # Proxy status
+    status_parser = proxy_subparsers.add_parser(
+        "status",
+        help="Show proxy server status",
+        description="Display status of proxy server and all models",
+    )
+    status_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output in JSON format",
+    )
+    status_parser.add_argument(
+        "--proxy-host",
+        help="Proxy server host (default: auto-detect or localhost)",
+    )
+    status_parser.add_argument(
+        "--proxy-port",
+        type=int,
+        help="Proxy server port (default: auto-detect or 8000)",
+    )
+
+    # Add model to proxy
+    add_parser = proxy_subparsers.add_parser(
+        "add",
+        help="Add a model to running proxy",
+        description="Add a new model to the running proxy server",
+    )
+    add_parser.add_argument(
+        "name",
+        help="Name for the model (used in API requests)",
+    )
+    add_parser.add_argument(
+        "model_path",
+        help="Model path or HuggingFace ID",
+    )
+    add_parser.add_argument(
+        "--gpu",
+        type=int,
+        action="append",
+        help="GPU ID to use (can specify multiple)",
+    )
+    add_parser.add_argument(
+        "--port",
+        type=int,
+        help="Port for the vLLM server",
+    )
+    add_parser.add_argument(
+        "--profile",
+        help="vLLM CLI profile to use",
+    )
+    add_parser.add_argument(
+        "--proxy-host",
+        help="Proxy server host (default: auto-detect or localhost)",
+    )
+    add_parser.add_argument(
+        "--proxy-port",
+        type=int,
+        help="Proxy server port (default: auto-detect or 8000)",
+    )
+
+    # Remove model from proxy
+    remove_parser = proxy_subparsers.add_parser(
+        "remove",
+        help="Remove a model from proxy",
+        description="Remove a model from the running proxy server",
+    )
+    remove_parser.add_argument(
+        "name",
+        help="Name of the model to remove",
+    )
+    remove_parser.add_argument(
+        "--proxy-host",
+        help="Proxy server host (default: auto-detect or localhost)",
+    )
+    remove_parser.add_argument(
+        "--proxy-port",
+        type=int,
+        help="Proxy server port (default: auto-detect or 8000)",
+    )
+
+    # Proxy configuration
+    config_parser = proxy_subparsers.add_parser(
+        "config",
+        help="Manage proxy configuration",
+        description="Create, edit, or export proxy configuration",
+    )
+    config_parser.add_argument(
+        "--create",
+        help="Create example configuration file",
+    )
+    config_parser.add_argument(
+        "--edit",
+        action="store_true",
+        help="Edit proxy configuration interactively",
+    )
+    config_parser.add_argument(
+        "--export",
+        help="Export current configuration to file",
     )
 
 

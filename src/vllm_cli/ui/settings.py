@@ -26,6 +26,7 @@ def handle_settings() -> str:
         settings_options = [
             "Manage Shortcuts",
             "Manage Profiles",
+            "Manage Proxy Configurations",
             "Universal Environment Variables",
             "Model Directories",
             "Server Defaults",
@@ -44,6 +45,8 @@ def handle_settings() -> str:
             manage_shortcuts()
         elif action == "Manage Profiles":
             manage_profiles()
+        elif action == "Manage Proxy Configurations":
+            manage_proxy_configurations()
         elif action == "Universal Environment Variables":
             configure_universal_environment()
         elif action == "Model Directories":
@@ -61,6 +64,145 @@ def handle_settings() -> str:
             input("\nPress Enter to continue...")
 
     return "continue"
+
+
+def manage_proxy_configurations() -> str:
+    """
+    Manage saved proxy configurations.
+
+    Allows viewing, editing, deleting, and exporting saved proxy configurations.
+    This function is now part of Settings for consistency with profile and shortcut management.
+    """
+    from ..proxy.config import ProxyConfigManager
+    from .proxy_control import display_proxy_config, edit_proxy_config_interactive
+
+    config_manager = ProxyConfigManager()
+
+    while True:
+        saved_configs = config_manager.list_saved_configs()
+
+        console.print("\n[bold cyan]Manage Proxy Configurations[/bold cyan]")
+
+        if not saved_configs:
+            console.print("\n[yellow]No saved proxy configurations found.[/yellow]")
+            console.print("Use 'Multi-Model Proxy' from the main menu to create one.")
+            input("\nPress Enter to continue...")
+            return "continue"
+
+        # Display saved configurations
+        from rich.table import Table
+
+        table = Table(title="Saved Proxy Configurations")
+        table.add_column("Name", style="cyan")
+        table.add_column("Port", style="magenta")
+        table.add_column("Models", style="yellow")
+        table.add_column("Preview", style="dim")
+
+        for name, info in saved_configs.items():
+            preview = ", ".join(info["model_names"][:2])
+            if len(info["model_names"]) > 2:
+                preview += ", ..."
+            table.add_row(name, str(info["port"]), str(info["models"]), preview)
+
+        console.print(table)
+
+        # Menu options
+        options = [
+            "View configuration details",
+            "Edit configuration",
+            "Delete configuration",
+            "Export configuration",
+        ]
+
+        action = unified_prompt(
+            "manage_proxy_action", "Select action", options, allow_back=True
+        )
+
+        if action == "BACK":
+            return "continue"
+
+        # Select configuration for action
+        config_names = list(saved_configs.keys())
+        config_names.append("Cancel")
+
+        selected_name = unified_prompt(
+            "select_proxy_config",
+            f"Select configuration to {action.lower()}",
+            config_names,
+            allow_back=False,
+        )
+
+        if selected_name == "Cancel":
+            continue
+
+        if action == "View configuration details":
+            # Load and display full configuration
+            config = config_manager.load_named_config(selected_name)
+            if config:
+                console.print(f"\n[bold]Configuration: {selected_name}[/bold]")
+                display_proxy_config(config)
+                input("\nPress Enter to continue...")
+
+        elif action == "Edit configuration":
+            # Load configuration for editing
+            config = config_manager.load_named_config(selected_name)
+            if config:
+                edited_config = edit_proxy_config_interactive(config)
+                if edited_config:
+                    # Ask if user wants to save changes
+                    if (
+                        unified_prompt(
+                            "save_proxy_changes",
+                            "Save changes?",
+                            ["Yes, save changes", "No, discard changes"],
+                            allow_back=False,
+                        )
+                        == "Yes, save changes"
+                    ):
+                        config_manager.save_named_config(edited_config, selected_name)
+                        console.print(
+                            f"[green]✓ Configuration '{selected_name}' updated[/green]"
+                        )
+
+        elif action == "Delete configuration":
+            # Confirm deletion
+            console.print(
+                f"\n[yellow]Warning: This will delete configuration '{selected_name}'[/yellow]"
+            )
+            if (
+                unified_prompt(
+                    "confirm_proxy_delete",
+                    "Are you sure?",
+                    ["Yes, delete", "No, cancel"],
+                    allow_back=False,
+                )
+                == "Yes, delete"
+            ):
+                if config_manager.delete_named_config(selected_name):
+                    console.print(
+                        f"[green]✓ Configuration '{selected_name}' deleted[/green]"
+                    )
+                else:
+                    console.print("[red]Failed to delete configuration[/red]")
+
+        elif action == "Export configuration":
+            # Export to custom location
+            config = config_manager.load_named_config(selected_name)
+            if config:
+                console.print("\nEnter path to export configuration to:")
+                export_path = input("Path (e.g., ./my-proxy.yaml): ").strip()
+                if export_path:
+                    try:
+                        from pathlib import Path
+
+                        export_file = Path(export_path)
+                        config_manager.save_config(config, export_file)
+                        console.print(
+                            f"[green]✓ Configuration exported to {export_file}[/green]"
+                        )
+                    except Exception as e:
+                        console.print(f"[red]Export failed: {e}[/red]")
+                input("\nPress Enter to continue...")
 
 
 def configure_universal_environment() -> str:

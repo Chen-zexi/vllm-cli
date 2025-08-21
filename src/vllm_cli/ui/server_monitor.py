@@ -73,13 +73,10 @@ def monitor_server(server: VLLMServer) -> str:
             )
 
         # Header
-        layout["header"].update(
-            create_panel(
-                f"vLLM Server Monitor - {server.model}",
-                title="Monitor",
-                border_style="cyan",
-            )
+        header_text = Text(
+            f"vLLM Server Monitor - {server.model}", style="bold cyan", justify="center"
         )
+        layout["header"].update(Padding(header_text, (1, 0)))
 
         # Footer with exit instructions
         layout["footer"].update(
