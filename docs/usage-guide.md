@@ -97,9 +97,6 @@ vllm-cli stop --all
 ```bash
 # Show system information
 vllm-cli info
-
-# Show detailed GPU information
-vllm-cli info --verbose
 ```
 
 ## Configuration Management
@@ -225,28 +222,14 @@ Pass any vLLM argument not explicitly supported:
 vllm-cli serve MODEL --custom-args "--arg1 value1 --arg2 value2"
 ```
 
-### Integration with Scripts
-
-```python
-import subprocess
-
-# Launch vLLM server programmatically
-result = subprocess.run(
-    ["vllm-cli", "serve", "facebook/opt-125m", "--profile", "high_throughput"],
-    capture_output=True,
-    text=True
-)
-```
-
 ## Tips and Best Practices
 
 1. **Profile Selection**: Start with `standard` profile and adjust based on needs
 2. **GPU Memory**: Monitor GPU memory usage to optimize batch sizes
 3. **Quantization**: Use quantization for larger models on limited hardware
 4. **Environment Variables**: Test environment variables in session before adding to profiles
-5. **Shortcuts**: Create shortcuts for production deployments
-6. **Monitoring**: Keep server monitoring open to track performance
-7. **Logs**: Check logs when servers fail to start for detailed error messages
+5. **Shortcuts**: Create shortcuts for frequently used configurations
+6. **Logs**: Check logs when servers fail to start for detailed error messages
 
 ## See Also
 

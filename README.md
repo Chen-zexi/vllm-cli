@@ -52,6 +52,28 @@ vllm-cli serve --shortcut my-gpt-server
 
 See [CHANGELOG.md](CHANGELOG.md) for detailed release notes.
 
+## 🚧 Pre-Release Features (v0.2.5)
+
+### Multi-Model Proxy Server (Experimental)
+
+The Multi-Model Proxy is a new experimental feature that enables serving multiple LLMs through a single unified API endpoint. This feature is currently under active development and available for testing.
+
+**What It Does:**
+- 🎯 **Single Endpoint** - All your models accessible through one API
+- 🖥️ **Smart GPU Management** - Automatically distributes models across your GPUs
+- 🔄 **Live Management** - Add or remove models without stopping the service
+- 🎨 **Interactive Setup** - User-friendly wizard guides you through configuration
+
+**You can install the pre-release version with:**
+
+```bash
+pip install --pre --upgrade vllm-cli
+```
+
+**Note:** This is an experimental feature under active development. Your feedback helps us improve! Please share your experience through [GitHub Issues](https://github.com/Chen-zexi/vllm-cli/issues).
+
+For complete documentation, see the [🌐 Multi-Model Proxy Guide](docs/multi-model-proxy.md).
+
 ## Quick Start
 
 ### Installation
@@ -79,13 +101,13 @@ pip install -e .
 vllm-cli
 
 # Serve a model
-vllm-cli serve facebook/opt-125m
+vllm-cli serve --model openai/gpt-oss-20b
 
 # Use a shortcut
 vllm-cli serve --shortcut my-model
 ```
 
-For detailed usage instructions, see the [📘 Usage Guide](docs/usage-guide.md).
+For detailed usage instructions, see the [📘 Usage Guide](docs/usage-guide.md) and [🌐 Multi-Model Proxy Guide](docs/multi-model-proxy.md).
 
 ## Configuration
 
@@ -115,6 +137,7 @@ See [**📋 Profiles Guide**](docs/profiles.md) for detailed information.
 ## Documentation
 
 - [**📘 Usage Guide**](docs/usage-guide.md) - Complete usage instructions
+- [**🌐 Multi-Model Proxy**](docs/multi-model-proxy.md) - Serve multiple models simultaneously
 - [**📋 Profiles Guide**](docs/profiles.md) - Built-in profiles details
 - [**❓ Troubleshooting**](docs/troubleshooting.md) - Common issues and solutions
 - [**📸 Screenshots**](docs/screenshots.md) - Visual feature overview
