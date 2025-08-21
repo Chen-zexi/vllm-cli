@@ -33,7 +33,7 @@ class ProxyManager:
         self.vllm_servers: Dict[str, VLLMServer] = {}
         self.config_manager = ConfigManager()
 
-        # For backward compatibility
+        # Compatibility properties for monitoring code that may still reference old structure
 
     def start_proxy(self) -> bool:
         """

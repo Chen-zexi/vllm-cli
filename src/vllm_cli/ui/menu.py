@@ -295,7 +295,6 @@ def show_main_menu() -> str:
     Display the main menu and return the selected action.
     """
     # Import here to avoid circular dependencies
-    from .log_viewer import select_server_for_logs, show_log_menu
     from .model_manager import handle_model_management
     from .server_control import (
         handle_custom_config,
@@ -325,14 +324,13 @@ def show_main_menu() -> str:
 
     if active_servers:
         menu_options.append(f"Monitor Active Servers ({len(active_servers)})")
-        menu_options.append(f"View Server Logs ({len(active_servers)})")
 
     menu_options.extend(
         [
             "Quick Serve",
             "Serve with Profile",
-            "Multi-Model Proxy",
-            "Custom Configuration",
+            "Serve with Custom Config",
+            "Multi-Model Proxy (Exp)",
             "Model Management",
             "System Information",
             "Settings",
@@ -355,10 +353,10 @@ def show_main_menu() -> str:
         return handle_quick_serve()
     elif action == "Serve with Profile":
         return handle_serve_with_profile()
-    elif action == "Multi-Model Proxy":
-        return handle_multi_model_proxy()
-    elif action == "Custom Configuration":
+    elif action == "Serve with Custom Config":
         return handle_custom_config()
+    elif action == "Multi-Model Proxy (Exp)":
+        return handle_multi_model_proxy()
     elif action == "Model Management":
         return handle_model_management()
     elif action == "System Information":
@@ -367,10 +365,5 @@ def show_main_menu() -> str:
         return handle_settings()
     elif "Monitor Active Servers" in action:
         return monitor_active_servers()
-    elif "View Server Logs" in action:
-        server = select_server_for_logs()
-        if server:
-            show_log_menu(server)
-        return "continue"
 
     return "continue"

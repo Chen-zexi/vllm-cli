@@ -140,29 +140,57 @@ def handle_serve_with_profile() -> str:
     # Handle different model selection formats
     lora_modules = None
     if isinstance(model_selection, dict):
-        if "type" in model_selection and model_selection["type"] == "ollama_model":
+        if "type" in model_selection and model_selection["type"] == "shortcut":
+            # Shortcut selected - use its model and profile directly
+            model = model_selection["model"]
+            profile_name = model_selection["profile"]
+            shortcut_name = model_selection["name"]
+            config_overrides = model_selection.get("config_overrides", {})
+            model_config = None
+
+            console.print(f"\n[bold cyan]Using Shortcut: {shortcut_name}[/bold cyan]")
+            console.print(f"  Model: {model}")
+            console.print(f"  Profile: {profile_name}")
+
+            # Skip profile selection since shortcut includes it
+        elif "type" in model_selection and model_selection["type"] == "ollama_model":
             # Ollama/GGUF model configuration
             model = model_selection["model"]  # Path to GGUF file
             model_config = model_selection  # Keep full config for GGUF setup
             logger.info(f"Selected Ollama model: {model_selection.get('name', model)}")
+
+            # Select profile for non-shortcut
+            profile_name = select_profile()
+            if not profile_name:
+                return "continue"
         elif "lora_modules" in model_selection:
             # LoRA configuration
             model = model_selection["model"]
             lora_modules = model_selection["lora_modules"]
             model_config = model_selection
+
+            # Select profile for non-shortcut
+            profile_name = select_profile()
+            if not profile_name:
+                return "continue"
         else:
             # Other dict format - use as is
             model = model_selection.get("model", model_selection)
             model_config = model_selection
+
+            # Select profile for non-shortcut
+            profile_name = select_profile()
+            if not profile_name:
+                return "continue"
     else:
         # Simple string model name
         model = model_selection
         model_config = None
 
-    # Select profile
-    profile_name = select_profile()
-    if not profile_name:
-        return "continue"
+        # Select profile for non-shortcut
+        profile_name = select_profile()
+        if not profile_name:
+            return "continue"
 
     # Get profile configuration
     config_manager = ConfigManager()
@@ -183,6 +211,12 @@ def handle_serve_with_profile() -> str:
         config["model"] = model_config  # Pass the full dict with LoRA info
     else:
         config["model"] = model
+
+    # Apply config overrides from shortcut if present
+    if isinstance(model_selection, dict) and model_selection.get("type") == "shortcut":
+        config_overrides = model_selection.get("config_overrides", {})
+        if config_overrides:
+            config.update(config_overrides)
 
     # Apply dynamic defaults for display
     profile_manager = config_manager.profile_manager

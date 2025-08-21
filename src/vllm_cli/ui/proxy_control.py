@@ -10,6 +10,7 @@ from rich.table import Table
 from ..proxy.config import ProxyConfigManager
 from ..proxy.models import ModelConfig, ProxyConfig
 from .common import console
+from .custom_config import select_gpus
 from .model_manager import select_model
 from .navigation import unified_prompt
 
@@ -110,11 +111,11 @@ def configure_proxy_interactively() -> Optional[ProxyConfig]:
         action = unified_prompt(
             "model_action",
             prompt_msg,
-            ["Add a model", "Done configuring models"],
+            ["Add a model", "✓ Done configuring models"],
             allow_back=False,
         )
 
-        if action == "Done configuring models":
+        if action == "✓ Done configuring models":
             break
 
         # Add a model
@@ -139,6 +140,46 @@ def configure_proxy_interactively() -> Optional[ProxyConfig]:
     )
 
 
+def _check_parallel_settings_conflict(
+    profile: str, gpu_ids: List[int], config_manager
+) -> None:
+    """
+    Check and warn about parallel settings conflicts with GPU selection.
+
+    Args:
+        profile: Profile name
+        gpu_ids: List of selected GPU IDs
+        config_manager: ConfigManager instance
+    """
+    if profile and len(gpu_ids) == 1:
+        all_profiles = config_manager.get_all_profiles()
+        profile_config = all_profiles.get(profile, {}).get("config", {})
+        parallel_settings = []
+
+        if profile_config.get("tensor_parallel_size"):
+            parallel_settings.append(
+                f"tensor_parallel_size={profile_config['tensor_parallel_size']}"
+            )
+        if profile_config.get("pipeline_parallel_size"):
+            parallel_settings.append(
+                f"pipeline_parallel_size={profile_config['pipeline_parallel_size']}"
+            )
+        if profile_config.get("enable_expert_parallel"):
+            parallel_settings.append("enable_expert_parallel=True")
+
+        if parallel_settings:
+            console.print("\n[yellow]⚠ Warning:[/yellow]")
+            console.print(
+                f"Profile '{profile}' contains parallel settings: {', '.join(parallel_settings)}"
+            )
+            console.print(
+                "These settings will be automatically disabled for single-GPU deployment."
+            )
+            console.print(
+                "[dim]The model will run on a single GPU as configured.[/dim]\n"
+            )
+
+
 def configure_model_interactively(index: int) -> Optional[ModelConfig]:
     """
     Configure a single model interactively.
@@ -156,7 +197,23 @@ def configure_model_interactively(index: int) -> Optional[ModelConfig]:
     if not model_selection:
         return None
 
-    if isinstance(model_selection, dict):
+    # Check if a shortcut was selected
+    is_shortcut = (
+        isinstance(model_selection, dict) and model_selection.get("type") == "shortcut"
+    )
+    shortcut_profile = None
+
+    if is_shortcut:
+        # Extract shortcut information
+        model_path = model_selection["model"]
+        name = model_path
+        shortcut_profile = model_selection["profile"]
+        shortcut_name = model_selection["name"]
+
+        console.print(f"\n[bold cyan]Using Shortcut: {shortcut_name}[/bold cyan]")
+        console.print(f"[green]Model: {name}[/green]")
+        console.print(f"[blue]Profile: {shortcut_profile}[/blue]")
+    elif isinstance(model_selection, dict):
         model_path = model_selection.get("model", model_selection.get("path"))
         # For special model types (e.g., Ollama), use the name if available
         if model_selection.get("type") == "ollama_model" and model_selection.get(
@@ -170,8 +227,9 @@ def configure_model_interactively(index: int) -> Optional[ModelConfig]:
         model_path = model_selection
         name = model_path
 
-    # Display the model that will be used
-    console.print(f"\n[green]Model: {name}[/green]")
+    # Display the model that will be used (only if not a shortcut, as shortcuts already display it)
+    if not is_shortcut:
+        console.print(f"\n[green]Model: {name}[/green]")
 
     # Optional: Allow user to provide an alias (but keep the actual model as primary)
     use_alias = (
@@ -194,8 +252,21 @@ def configure_model_interactively(index: int) -> Optional[ModelConfig]:
             )
 
     # GPU assignment
-    console.print("\nGPU Assignment:")
-    gpu_str = input("GPU IDs (comma-separated, e.g., 0,1): ").strip()
+    console.print("\n[bold]GPU Assignment[/bold]")
+
+    # Show warning if using shortcut
+    if is_shortcut:
+        console.print(
+            "[yellow]⚠ Warning:[/yellow] GPU selection may override profile settings"
+        )
+        console.print(
+            f"[dim]Profile '{shortcut_profile}' may have tensor_parallel_size or pipeline_parallel_size[/dim]"
+        )
+        console.print(
+            "[dim]Your GPU selection will determine the actual parallelism used[/dim]\n"
+        )
+
+    gpu_str = select_gpus()
     gpu_ids = []
     if gpu_str:
         try:
@@ -204,6 +275,8 @@ def configure_model_interactively(index: int) -> Optional[ModelConfig]:
             console.print(
                 "[yellow]Invalid GPU IDs, using automatic assignment[/yellow]"
             )
+    else:
+        console.print("[dim]No GPUs selected, will use automatic assignment[/dim]")
 
     # Port
     default_port = 8001 + index
@@ -214,51 +287,38 @@ def configure_model_interactively(index: int) -> Optional[ModelConfig]:
         console.print(f"[yellow]Invalid port, using default: {default_port}[/yellow]")
         port = default_port
 
-    # Profile
-    from ..config import ConfigManager
+    # Profile selection (skip if using shortcut)
+    if is_shortcut:
+        # Use the profile from the shortcut
+        profile = shortcut_profile
+        console.print(f"\n[dim]Using profile from shortcut: {profile}[/dim]")
 
-    config_manager = ConfigManager()
-    all_profiles = config_manager.get_all_profiles()
+        # Still check for conflicts with GPU selection
+        from ..config import ConfigManager
 
-    if all_profiles:
-        profile_names = list(all_profiles.keys())
-        profile_names.append("No profile")
-
-        selected_profile = unified_prompt(
-            "profile_selection", "Select profile", profile_names, allow_back=False
-        )
-
-        profile = None if selected_profile == "No profile" else selected_profile
-
-        # Check if profile has parallel settings that may conflict with single GPU
-        if profile and len(gpu_ids) == 1:
-            profile_config = all_profiles.get(profile, {}).get("config", {})
-            parallel_settings = []
-
-            if profile_config.get("tensor_parallel_size"):
-                parallel_settings.append(
-                    f"tensor_parallel_size={profile_config['tensor_parallel_size']}"
-                )
-            if profile_config.get("pipeline_parallel_size"):
-                parallel_settings.append(
-                    f"pipeline_parallel_size={profile_config['pipeline_parallel_size']}"
-                )
-            if profile_config.get("enable_expert_parallel"):
-                parallel_settings.append("enable_expert_parallel=True")
-
-            if parallel_settings:
-                console.print("\n[yellow]⚠ Warning:[/yellow]")
-                console.print(
-                    f"Profile '{profile}' contains parallel settings: {', '.join(parallel_settings)}"
-                )
-                console.print(
-                    "These settings will be automatically disabled for single-GPU deployment."
-                )
-                console.print(
-                    "[dim]The model will run on a single GPU as configured.[/dim]\n"
-                )
+        config_manager = ConfigManager()
+        _check_parallel_settings_conflict(profile, gpu_ids, config_manager)
     else:
-        profile = None
+        # Normal profile selection for non-shortcut models
+        from ..config import ConfigManager
+
+        config_manager = ConfigManager()
+        all_profiles = config_manager.get_all_profiles()
+
+        if all_profiles:
+            profile_names = list(all_profiles.keys())
+            profile_names.append("No profile")
+
+            selected_profile = unified_prompt(
+                "profile_selection", "Select profile", profile_names, allow_back=False
+            )
+
+            profile = None if selected_profile == "No profile" else selected_profile
+
+            # Check if profile has parallel settings that may conflict with single GPU
+            _check_parallel_settings_conflict(profile, gpu_ids, config_manager)
+        else:
+            profile = None
 
     config = ModelConfig(
         name=name,
@@ -281,7 +341,15 @@ def configure_model_interactively(index: int) -> Optional[ModelConfig]:
 
 
 def edit_proxy_config():
-    """Edit proxy configuration interactively (legacy function for compatibility)."""
+    """
+    Edit proxy configuration interactively.
+
+    Loads the current configuration and provides an interactive
+    editing interface.
+
+    Returns:
+        Modified ProxyConfig or None if cancelled
+    """
     config_manager = ProxyConfigManager()
     current_config = config_manager.load_config()
     return edit_proxy_config_interactive(current_config)
@@ -388,23 +456,17 @@ def edit_proxy_settings(config: ProxyConfig):
             console.print("[red]Invalid port number[/red]")
 
     # Toggle settings
-    config.enable_cors = (
-        unified_prompt(
-            "cors_setting",
-            f"CORS (currently {'enabled' if config.enable_cors else 'disabled'})",
-            ["Enable", "Disable", "Keep current"],
-            allow_back=False,
-        )
-        == "Enable"
-        if "Enable"
-        in unified_prompt(
-            "cors_setting",
-            f"CORS (currently {'enabled' if config.enable_cors else 'disabled'})",
-            ["Enable", "Disable", "Keep current"],
-            allow_back=False,
-        )
-        else config.enable_cors
+    cors_choice = unified_prompt(
+        "cors_setting",
+        f"CORS (currently {'enabled' if config.enable_cors else 'disabled'})",
+        ["Enable", "Disable", "Keep current"],
+        allow_back=False,
     )
+    if cors_choice == "Enable":
+        config.enable_cors = True
+    elif cors_choice == "Disable":
+        config.enable_cors = False
+    # "Keep current" - no change needed
 
     console.print("[green]✓ Settings updated[/green]")
 

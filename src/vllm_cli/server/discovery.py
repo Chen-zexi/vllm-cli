@@ -71,13 +71,22 @@ def _is_vllm_serve_process(cmdline: List[str]) -> bool:
         cmdline: Command line arguments list
 
     Returns:
-        True if this is a vLLM serve process
+        True if this is a vLLM serve process or proxy server
     """
     if not cmdline:
         return False
 
     cmdline_str = " ".join(cmdline).lower()
-    return "vllm" in cmdline_str and "serve" in cmdline_str
+
+    # Check for regular vLLM serve process
+    if "vllm" in cmdline_str and "serve" in cmdline_str:
+        return True
+
+    # Check for proxy server process
+    if "vllm_cli.proxy.server_launcher" in cmdline_str:
+        return True
+
+    return False
 
 
 def _extract_server_info_from_cmdline(pid: int, cmdline: List[str]) -> Dict[str, Any]:
@@ -93,7 +102,20 @@ def _extract_server_info_from_cmdline(pid: int, cmdline: List[str]) -> Dict[str,
     """
     server_info = {"pid": pid, "model": "unknown", "port": 8000}  # Default
 
-    # Try to extract model and port from command line
+    # Check if this is a proxy server
+    cmdline_str = " ".join(cmdline)
+    if "vllm_cli.proxy.server_launcher" in cmdline_str:
+        server_info["model"] = "vLLM Proxy"
+        # Extract port from proxy command line
+        for i, arg in enumerate(cmdline):
+            if arg == "--port" and i + 1 < len(cmdline):
+                try:
+                    server_info["port"] = int(cmdline[i + 1])
+                except ValueError:
+                    pass  # Keep default port
+        return server_info
+
+    # Try to extract model and port from regular vLLM command line
     for i, arg in enumerate(cmdline):
         if arg == "serve" and i + 1 < len(cmdline):
             server_info["model"] = cmdline[i + 1]

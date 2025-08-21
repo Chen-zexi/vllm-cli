@@ -22,12 +22,10 @@ class ProxyConfigManager:
     def __init__(self):
         """Initialize the proxy configuration manager."""
         self.config_dir = Path.home() / ".config" / "vllm-cli"
-        self.proxy_config_file = (
-            self.config_dir / "proxy_config.yaml"
-        )  # Legacy location
-        self.proxy_configs_dir = (
-            self.config_dir / "proxy_configs"
-        )  # New named configs location
+        # Default configuration file path - used as fallback when no path specified
+        # Also maintains backward compatibility with existing configurations
+        self.proxy_config_file = self.config_dir / "proxy_config.yaml"
+        self.proxy_configs_dir = self.config_dir / "proxy_configs"
         self.config_dir.mkdir(parents=True, exist_ok=True)
         self.proxy_configs_dir.mkdir(parents=True, exist_ok=True)
 

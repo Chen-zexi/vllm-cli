@@ -608,8 +608,9 @@ def monitor_proxy_logs(proxy_manager: ProxyManager) -> str:
         model_count = (
             len(proxy_manager.vllm_servers) if proxy_manager.vllm_servers else 1
         )
-        # Size: 3 for table header + model rows + 1 buffer, min 6, max 12
-        backends_size = max(6, min(model_count + 4, 12))
+        # Size calculation: 6 overhead (2 panel borders, 1 title, 1 table header, 1 separator, 1 padding) + model rows
+        # Minimum 7 lines to ensure proper display, maximum 15 to prevent too tall panels
+        backends_size = max(7, min(6 + model_count, 15))
 
         # Create layout
         layout = Layout()
@@ -627,8 +628,8 @@ def monitor_proxy_logs(proxy_manager: ProxyManager) -> str:
                 Layout(name="header", size=3),
                 Layout(name="proxy_info", size=6),
                 Layout(
-                    name="backends", size=backends_size + 2
-                ),  # Extra space when no GPU
+                    name="backends", size=backends_size
+                ),  # Same size, calculation already includes overhead
                 Layout(name="logs"),  # Takes remaining space
                 Layout(name="footer", size=1),
             )
@@ -712,7 +713,7 @@ def monitor_proxy_logs(proxy_manager: ProxyManager) -> str:
                 )
 
                 # Backend servers table
-                backends_table = Table(title="Registered Backends")
+                backends_table = Table()
                 backends_table.add_column("Model", style="cyan")
                 backends_table.add_column("URL", style="magenta")
                 backends_table.add_column("Status", style="green")
@@ -762,7 +763,11 @@ def monitor_proxy_logs(proxy_manager: ProxyManager) -> str:
                 else:
                     backends_table.add_row("No backends registered", "", "", "")
 
-                layout["backends"].update(backends_table)
+                layout["backends"].update(
+                    create_panel(
+                        backends_table, title="Registered Backends", border_style="blue"
+                    )
+                )
 
                 # GPU panel if enabled
                 if show_gpu:

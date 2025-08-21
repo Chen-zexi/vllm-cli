@@ -18,6 +18,69 @@ from .navigation import unified_prompt
 logger = logging.getLogger(__name__)
 
 
+def select_shortcut_for_serving() -> Optional[Dict[str, Any]]:
+    """
+    Select a shortcut for serving, returning it in a special format.
+
+    Returns:
+        Dictionary with shortcut information including model and profile
+    """
+    from ..config import ConfigManager
+
+    config_manager = ConfigManager()
+    shortcuts = config_manager.list_shortcuts()
+
+    if not shortcuts:
+        console.print("[yellow]No shortcuts available.[/yellow]")
+        return None
+
+    # Build shortcut choices with details
+    shortcut_choices = []
+    for shortcut in shortcuts:
+        name = shortcut["name"]
+        model = shortcut["model"]
+        profile = shortcut["profile"]
+        # Truncate long model names for display
+        if len(str(model)) > 40:
+            model_display = "..." + str(model)[-37:]
+        else:
+            model_display = str(model)
+        shortcut_choices.append(f"{name}: {model_display} [{profile}]")
+
+    # Show shortcut selection
+    console.print("\n[bold cyan]Select Shortcut[/bold cyan]")
+    selected = unified_prompt(
+        "shortcut_select",
+        "Choose a shortcut to use",
+        shortcut_choices,
+        allow_back=True,
+    )
+
+    if not selected or selected == "BACK":
+        return None
+
+    # Extract shortcut name from selection
+    shortcut_name = selected.split(":")[0].strip()
+
+    # Get full shortcut data
+    shortcut_data = config_manager.get_shortcut(shortcut_name)
+    if not shortcut_data:
+        console.print(f"[red]Shortcut '{shortcut_name}' not found.[/red]")
+        return None
+
+    # Update last used timestamp
+    config_manager.shortcut_manager.update_last_used(shortcut_name)
+
+    # Return shortcut in a special format that indicates it's a shortcut
+    return {
+        "type": "shortcut",
+        "name": shortcut_name,
+        "model": shortcut_data["model"],
+        "profile": shortcut_data["profile"],
+        "config_overrides": shortcut_data.get("config_overrides", {}),
+    }
+
+
 def enter_remote_model() -> Optional[str]:
     """
     Allow user to enter a HuggingFace model ID for remote serving.
@@ -170,12 +233,27 @@ def select_model() -> Optional[Any]:
     console.print("\n[bold cyan]Model Selection[/bold cyan]")
 
     try:
+        # Import here to avoid circular dependency
+        from ..config import ConfigManager
+
+        # Check if shortcuts are available
+        config_manager = ConfigManager()
+        shortcuts = config_manager.list_shortcuts()
+
         # First, ask if user wants to use local or remote model
-        model_source_choices = [
-            "Select from local models",
-            "Serve model with LoRA adapters",
-            "Use a model from HuggingFace Hub (auto-download)",
-        ]
+        model_source_choices = []
+
+        # Add shortcut option if shortcuts exist
+        if shortcuts:
+            model_source_choices.append("Use saved shortcut")
+
+        model_source_choices.extend(
+            [
+                "Select from local models",
+                "Serve model with LoRA adapters",
+                "Use a model from HuggingFace Hub (auto-download)",
+            ]
+        )
 
         source_choice = unified_prompt(
             "model_source",
@@ -186,6 +264,10 @@ def select_model() -> Optional[Any]:
 
         if not source_choice or source_choice == "BACK":
             return None
+
+        if source_choice == "Use saved shortcut":
+            # Handle shortcut selection
+            return select_shortcut_for_serving()
 
         if source_choice == "Use a model from HuggingFace Hub (auto-download)":
             return enter_remote_model()

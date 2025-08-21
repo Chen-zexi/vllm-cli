@@ -253,7 +253,7 @@ def monitor_active_servers() -> str:
 
     # Select server to monitor or manage
     choices = [f"Monitor Server {i}" for i in range(1, len(servers) + 1)]
-    choices.extend([f"View Logs {i}" for i in range(1, len(servers) + 1)])
+    choices.append("View Server Logs")
     choices.append("Stop All Servers")
 
     action = unified_prompt(
@@ -272,9 +272,13 @@ def monitor_active_servers() -> str:
     elif action.startswith("Monitor Server"):
         server_idx = int(action.split()[-1]) - 1
         return monitor_server(servers[server_idx])
-    elif action.startswith("View Logs"):
-        server_idx = int(action.split()[-1]) - 1
-        show_log_menu(servers[server_idx])
-        return "continue"
+    elif action == "View Server Logs":
+        # Import here to avoid circular dependencies
+        from .log_viewer import select_server_for_logs, show_log_menu
+
+        server = select_server_for_logs()
+        if server:
+            show_log_menu(server)
+        return monitor_active_servers()  # Return to this menu after viewing logs
 
     return "continue"

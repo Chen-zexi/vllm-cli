@@ -197,6 +197,9 @@ class ProxyServerProcess:
                     line = self.process.stdout.readline()
                     if line:
                         line = line.rstrip()
+                        # Remove misleading "(Press CTRL+C to quit)" from uvicorn logs
+                        if "(Press CTRL+C to quit)" in line:
+                            line = line.replace(" (Press CTRL+C to quit)", "")
                         # Add to queue for UI
                         self.log_queue.put(line)
                         # Add to recent logs buffer
