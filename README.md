@@ -59,10 +59,9 @@ See [CHANGELOG.md](CHANGELOG.md) for detailed release notes.
 The Multi-Model Proxy is a new experimental feature that enables serving multiple LLMs through a single unified API endpoint. This feature is currently under active development and available for testing.
 
 **What It Does:**
-- 🎯 **Single Endpoint** - All your models accessible through one API
-- 🖥️ **Smart GPU Management** - Automatically distributes models across your GPUs
-- 🔄 **Live Management** - Add or remove models without stopping the service
-- 🎨 **Interactive Setup** - User-friendly wizard guides you through configuration
+- **Single Endpoint** - All your models accessible through one API
+- **Live Management** - Add or remove models without stopping the service
+- **Interactive Setup** - User-friendly wizard guides you through configuration
 
 **You can install the pre-release version with:**
 
@@ -88,6 +87,15 @@ git clone https://github.com/Chen-zexi/vllm-cli.git
 cd vllm-cli
 pip install -e .
 ```
+
+#### For Isolated Installation (pipx/system packages)
+
+```bash
+# If you do not want to use virtual environment and want to install vLLM along with vLLM CLI
+pipx install "vllm-cli[vllm]"
+```
+
+**⚠️ Note:** This will install vLLM >= 0.10.0
 
 ### Prerequisites
 - Python 3.9+

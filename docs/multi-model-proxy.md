@@ -61,7 +61,7 @@ For each model, configure:
    - Shortcut users skip this (profile included)
 
 Add multiple models as needed, then select "Done configuring models".<br>
-At the moment, you can only assign one model to one GPU. 
+At the moment, you can only assign one model to one GPU.
 
 #### Step 3: Save Configuration (Optional)
 After configuration, choose:
@@ -134,6 +134,9 @@ Model A        Model B         Model C
 Port: 8001     Port: 8002      Port: 8003
 GPU: 0         GPU: 1          GPU: 2,3
 ```
+
+## Known Limitations
+Currently, the proxy server only supports one model per GPU.
 
 ## Troubleshooting
 
