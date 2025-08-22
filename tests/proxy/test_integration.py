@@ -206,7 +206,7 @@ class TestProxyIntegration:
             proxy_server.router.add_backend(
                 model.name,
                 backend_url,
-                model.dict(),
+                model.model_dump(),
             )
 
             # Also register aliases
@@ -214,7 +214,7 @@ class TestProxyIntegration:
                 proxy_server.router.add_backend(
                     alias,
                     backend_url,
-                    model.dict(),
+                    model.model_dump(),
                 )
 
         # Verify routing works

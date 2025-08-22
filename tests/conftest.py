@@ -218,3 +218,22 @@ def reset_singletons():
     """Reset any singleton instances between tests."""
     # Import and reset any singletons if needed
     yield
+
+
+@pytest.fixture(scope="session", autouse=True)
+def prevent_atexit_cleanup():
+    """Prevent atexit cleanup from running during tests."""
+    import atexit
+
+    from vllm_cli.server.process import cleanup_servers_on_exit
+
+    # Try to unregister the cleanup function
+    try:
+        atexit.unregister(cleanup_servers_on_exit)
+    except Exception:
+        # If it fails, that's okay - it might not be registered yet
+        pass
+
+    yield
+
+    # Don't re-register after tests - let the module handle its own lifecycle

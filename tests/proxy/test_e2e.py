@@ -3,14 +3,14 @@
 End-to-end tests for proxy functionality with mock vLLM servers.
 """
 import asyncio
+import socket
 import threading
 import time
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
-import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse, StreamingResponse
 
@@ -19,16 +19,26 @@ from vllm_cli.proxy.models import ModelConfig, ProxyConfig
 from vllm_cli.proxy.server import ProxyServer
 
 
+def get_free_port() -> int:
+    """Get a free port for testing."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        s.listen(1)
+        port = s.getsockname()[1]
+    return port
+
+
 class MockVLLMServer:
     """Mock vLLM server for testing."""
 
-    def __init__(self, model_name: str, port: int):
+    def __init__(self, model_name: str, port: Optional[int] = None):
         self.model_name = model_name
-        self.port = port
+        self.port = port or get_free_port()
         self.app = FastAPI()
         self.server = None
         self.thread = None
         self.request_count = 0
+        self.stop_event = threading.Event()
         self._setup_routes()
 
     def _setup_routes(self):
@@ -108,23 +118,44 @@ class MockVLLMServer:
 
     def start(self):
         """Start the mock server in a background thread."""
+        import uvicorn.config
+
+        config = uvicorn.Config(
+            app=self.app,
+            host="127.0.0.1",
+            port=self.port,
+            log_level="error",
+        )
+        self.server = uvicorn.Server(config)
 
         def run_server():
-            uvicorn.run(
-                self.app,
-                host="127.0.0.1",
-                port=self.port,
-                log_level="error",
-            )
+            try:
+                self.server.run()
+            except Exception:
+                pass  # Server stopped
 
         self.thread = threading.Thread(target=run_server, daemon=True)
         self.thread.start()
-        time.sleep(1)  # Give server time to start
+
+        # Wait for server to actually start
+        max_wait = 2.0
+        start_time = time.time()
+        while time.time() - start_time < max_wait:
+            try:
+                with socket.create_connection(("127.0.0.1", self.port), timeout=0.1):
+                    break
+            except (socket.timeout, ConnectionRefusedError):
+                time.sleep(0.1)
 
     def stop(self):
         """Stop the mock server."""
-        # In a real implementation, we'd properly shutdown uvicorn
-        pass
+        if self.server:
+            self.server.should_exit = True
+            self.stop_event.set()
+
+            # Wait a bit for graceful shutdown
+            if self.thread and self.thread.is_alive():
+                self.thread.join(timeout=1.0)
 
 
 class TestProxyE2E:
@@ -134,8 +165,8 @@ class TestProxyE2E:
     def mock_vllm_servers(self):
         """Create mock vLLM servers."""
         servers = [
-            MockVLLMServer("model1", 28001),
-            MockVLLMServer("model2", 28002),
+            MockVLLMServer("model1"),  # Will use dynamic port
+            MockVLLMServer("model2"),  # Will use dynamic port
         ]
 
         # Start servers
@@ -149,23 +180,23 @@ class TestProxyE2E:
             server.stop()
 
     @pytest.fixture
-    def e2e_proxy_config(self):
+    def e2e_proxy_config(self, mock_vllm_servers):
         """Create proxy configuration for E2E tests."""
         return ProxyConfig(
             host="127.0.0.1",
-            port=28000,
+            port=get_free_port(),  # Use dynamic port for proxy too
             models=[
                 ModelConfig(
                     name="model1",
                     model_path="test/model1",
-                    port=28001,
+                    port=mock_vllm_servers[0].port,  # Use actual server port
                     config_overrides={"aliases": ["m1", "first"]},
                     enabled=True,
                 ),
                 ModelConfig(
                     name="model2",
                     model_path="test/model2",
-                    port=28002,
+                    port=mock_vllm_servers[1].port,  # Use actual server port
                     config_overrides={"aliases": ["m2", "second"]},
                     enabled=True,
                 ),
@@ -195,10 +226,16 @@ class TestProxyE2E:
                 )
 
         # Verify routing is configured correctly
-        assert proxy_server.router.route_request("model1") == "http://127.0.0.1:28001"
-        assert proxy_server.router.route_request("m1") == "http://127.0.0.1:28001"
-        assert proxy_server.router.route_request("model2") == "http://127.0.0.1:28002"
-        assert proxy_server.router.route_request("m2") == "http://127.0.0.1:28002"
+        port1 = mock_vllm_servers[0].port
+        port2 = mock_vllm_servers[1].port
+        assert (
+            proxy_server.router.route_request("model1") == f"http://127.0.0.1:{port1}"
+        )
+        assert proxy_server.router.route_request("m1") == f"http://127.0.0.1:{port1}"
+        assert (
+            proxy_server.router.route_request("model2") == f"http://127.0.0.1:{port2}"
+        )
+        assert proxy_server.router.route_request("m2") == f"http://127.0.0.1:{port2}"
 
     @pytest.mark.asyncio
     async def test_e2e_streaming_response(self, mock_vllm_servers):
@@ -206,7 +243,7 @@ class TestProxyE2E:
         async with httpx.AsyncClient() as client:
             # Test streaming to first mock server
             response = await client.post(
-                "http://127.0.0.1:28001/v1/chat/completions",
+                f"http://127.0.0.1:{mock_vllm_servers[0].port}/v1/chat/completions",
                 json={
                     "model": "model1",
                     "messages": [{"role": "user", "content": "Stream test"}],
@@ -235,7 +272,11 @@ class TestProxyE2E:
 
             for i in range(5):
                 # Alternate between models
-                port = 28001 if i % 2 == 0 else 28002
+                port = (
+                    mock_vllm_servers[0].port
+                    if i % 2 == 0
+                    else mock_vllm_servers[1].port
+                )
                 model = "model1" if i % 2 == 0 else "model2"
 
                 task = client.post(
@@ -262,8 +303,8 @@ class TestProxyE2E:
         """Test model health checking."""
         async with httpx.AsyncClient() as client:
             # Check health of both mock servers
-            for port in [28001, 28002]:
-                response = await client.get(f"http://127.0.0.1:{port}/health")
+            for server in mock_vllm_servers:
+                response = await client.get(f"http://127.0.0.1:{server.port}/health")
                 assert response.status_code == 200
                 assert response.json()["status"] == "healthy"
 
@@ -272,14 +313,18 @@ class TestProxyE2E:
         """Test model listing from mock servers."""
         async with httpx.AsyncClient() as client:
             # List models from first server
-            response = await client.get("http://127.0.0.1:28001/v1/models")
+            response = await client.get(
+                f"http://127.0.0.1:{mock_vllm_servers[0].port}/v1/models"
+            )
             assert response.status_code == 200
             data = response.json()
             assert len(data["data"]) == 1
             assert data["data"][0]["id"] == "model1"
 
             # List models from second server
-            response = await client.get("http://127.0.0.1:28002/v1/models")
+            response = await client.get(
+                f"http://127.0.0.1:{mock_vllm_servers[1].port}/v1/models"
+            )
             assert response.status_code == 200
             data = response.json()
             assert len(data["data"]) == 1

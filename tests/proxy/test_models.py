@@ -74,7 +74,7 @@ class TestModelConfig:
             enabled=False,
         )
 
-        data = config.dict()
+        data = config.model_dump()
         assert data["name"] == "test"
         assert data["model_path"] == "path"
         assert data["port"] == 8001
@@ -82,7 +82,7 @@ class TestModelConfig:
         assert data["enabled"] is False
 
         # Test JSON serialization
-        json_str = config.json()
+        json_str = config.model_dump_json()
         assert "test" in json_str
         assert "8001" in json_str
 
@@ -156,7 +156,7 @@ class TestProxyConfig:
             models=[model],
         )
 
-        data = config.dict()
+        data = config.model_dump()
         assert data["host"] == "127.0.0.1"
         assert data["port"] == 8080
         assert len(data["models"]) == 1
@@ -283,7 +283,7 @@ class TestProxyStatus:
             total_requests=100,
         )
 
-        data = proxy_status.dict()
+        data = proxy_status.model_dump()
         assert data["proxy_running"] is True
         assert data["proxy_port"] == 8000
         assert data["total_requests"] == 100

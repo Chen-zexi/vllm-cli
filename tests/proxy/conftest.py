@@ -59,7 +59,7 @@ def sample_proxy_config() -> ProxyConfig:
 def temp_config_file(sample_proxy_config) -> Generator[Path, None, None]:
     """Create a temporary configuration file."""
     with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-        config_dict = sample_proxy_config.dict()
+        config_dict = sample_proxy_config.model_dump()
         yaml.dump({"proxy": config_dict["models"][0]}, f)
         temp_path = Path(f.name)
 

@@ -3,8 +3,25 @@
 from datetime import datetime
 from unittest.mock import Mock, patch
 
+import pytest
+
 from vllm_cli.server import process
 from vllm_cli.server.manager import VLLMServer
+
+
+@pytest.fixture(autouse=True)
+def clean_active_servers():
+    """Ensure _active_servers is clean before and after each test."""
+    # Save original state
+    original = process._active_servers.copy()
+    # Clear for test
+    process._active_servers.clear()
+
+    yield
+
+    # Restore original state
+    process._active_servers.clear()
+    process._active_servers.extend(original)
 
 
 class TestVLLMServer:
@@ -173,7 +190,6 @@ class TestVLLMServer:
 class TestServerProcess:
     """Test server process management functionality."""
 
-    @patch("vllm_cli.server.process._active_servers", [])
     def test_cleanup_servers_on_exit(self):
         """Test cleanup function for servers on exit."""
         mock_server1 = Mock()
@@ -201,7 +217,6 @@ class TestServerProcess:
         mock_server1.stop.assert_called_once()
         mock_server2.stop.assert_called_once()
 
-    @patch("vllm_cli.server.process._active_servers", [])
     def test_cleanup_servers_handles_errors(self):
         """Test cleanup handles errors gracefully."""
         mock_server = Mock()
@@ -227,16 +242,9 @@ class TestServerProcess:
 
     def test_register_server(self):
         """Test registering a new server."""
-        # Save original state
-        original_servers = process._active_servers.copy()
+        mock_server = Mock()
 
-        try:
-            mock_server = Mock()
+        # Register server
+        process.add_server(mock_server)
 
-            # Register server
-            process.add_server(mock_server)
-
-            assert mock_server in process._active_servers
-        finally:
-            # Restore original state
-            process._active_servers = original_servers
+        assert mock_server in process._active_servers
