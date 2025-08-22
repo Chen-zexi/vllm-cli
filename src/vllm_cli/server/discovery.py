@@ -56,12 +56,12 @@ def _scan_vllm_processes() -> List[Dict[str, Any]]:
             if status in [psutil.STATUS_ZOMBIE, psutil.STATUS_DEAD]:
                 logger.debug(f"Skipping zombie/dead process PID {proc.info['pid']}")
                 continue
-            
+
             # Double-check the process is actually running
             if not proc.is_running():
                 logger.debug(f"Skipping non-running process PID {proc.info['pid']}")
                 continue
-            
+
             cmdline = proc.info.get("cmdline", [])
             if _is_vllm_serve_process(cmdline):
                 server_info = _extract_server_info_from_cmdline(

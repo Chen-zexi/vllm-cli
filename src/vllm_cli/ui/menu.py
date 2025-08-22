@@ -6,6 +6,8 @@ Handles main menu display and navigation routing.
 """
 import logging
 
+import inquirer
+
 from ..server import get_active_servers
 from .navigation import unified_prompt
 
@@ -26,8 +28,8 @@ def manage_running_proxy(proxy_manager, proxy_config) -> None:
     """
     import time
 
-    from ..proxy.monitor import monitor_model_logs_menu, monitor_proxy_logs
     from .common import console
+    from .proxy_monitor import monitor_model_logs_menu, monitor_proxy_logs
 
     # Track the active proxy globally
     global _active_proxy_manager, _active_proxy_config
@@ -197,21 +199,30 @@ def handle_multi_model_proxy() -> str:
                 )
                 console.print(f"  • {model.name} (Port {model.port}, GPU {gpu_str})")
 
-            # Confirm start
-            if (
-                unified_prompt(
-                    "confirm_start",
-                    "\nStart this proxy configuration?",
-                    ["Yes, start proxy", "No, go back"],
-                    allow_back=False,
-                )
-                == "Yes, start proxy"
-            ):
+            # Confirm start - use inquirer.confirm for inline prompt
+            console.print()  # Add blank line before prompt
+            if inquirer.confirm("Start this proxy configuration?", default=True):
                 # Start the proxy
                 proxy_manager = ProxyManager(proxy_config)
-                console.print("\n[cyan]Starting model servers...[/cyan]")
-                started = proxy_manager.start_all_models()
-                console.print(f"Started {started}/{len(proxy_config.models)} models")
+
+                # Start model servers without waiting, show logs immediately
+                console.print("\n[cyan]Launching model servers...[/cyan]")
+                launched = proxy_manager.start_all_models_no_wait()
+
+                if launched > 0:
+                    # Monitor startup progress with live logs
+                    from ..proxy import monitor_startup_progress
+
+                    all_started = monitor_startup_progress(proxy_manager)
+
+                    if not all_started:
+                        console.print("[yellow]Some models failed to start.[/yellow]")
+                        if not inquirer.confirm(
+                            "Continue with available models?", default=False
+                        ):
+                            console.print("[yellow]Stopping all servers...[/yellow]")
+                            proxy_manager.stop_proxy()
+                            return "continue"
 
                 if proxy_manager.start_proxy():
                     console.print(

@@ -33,7 +33,52 @@ class ProxyManager:
         self.vllm_servers: Dict[str, VLLMServer] = {}
         self.config_manager = ConfigManager()
 
-        # Compatibility properties for monitoring code that may still reference old structure
+    def _proxy_api_request(
+        self,
+        method: str,
+        endpoint: str,
+        json_data: Optional[Dict] = None,
+        timeout: float = 5.0,
+    ) -> Optional[Any]:
+        """
+        Helper method for making HTTP requests to the proxy API.
+
+        Args:
+            method: HTTP method (POST, DELETE, GET)
+            endpoint: API endpoint path
+            json_data: Optional JSON data for request body
+            timeout: Request timeout in seconds
+
+        Returns:
+            Response object if successful, None if failed
+        """
+        try:
+            import httpx
+
+            url = f"http://localhost:{self.proxy_config.port}{endpoint}"
+            with httpx.Client() as client:
+                if method == "POST":
+                    response = client.post(url, json=json_data, timeout=timeout)
+                elif method == "DELETE":
+                    response = client.delete(url, timeout=timeout)
+                elif method == "GET":
+                    response = client.get(url, timeout=timeout)
+                else:
+                    logger.error(f"Unsupported HTTP method: {method}")
+                    return None
+
+                if response.status_code == 200:
+                    return response
+                else:
+                    logger.warning(
+                        f"API request failed: {method} {endpoint} - "
+                        f"{response.status_code}: {response.text}"
+                    )
+                    return None
+
+        except Exception as e:
+            logger.warning(f"API request error: {method} {endpoint} - {e}")
+            return None
 
     def start_proxy(self) -> bool:
         """
@@ -110,53 +155,69 @@ class ProxyManager:
             # Store server reference
             self.vllm_servers[model_config.name] = server
 
-            # Register with proxy if it's running
-            if self.proxy_process and self.proxy_process.is_running():
-                try:
-                    import httpx
-                    
-                    # Prepare model configuration for proxy
-                    model_data = {
-                        "name": model_config.name,
-                        "port": model_config.port,
-                        "model_path": model_config.model_path,
-                        "gpu_ids": model_config.gpu_ids,
-                        **model_config.config_overrides
-                    }
-                    
-                    # Register model with proxy via HTTP API
-                    proxy_url = f"http://localhost:{self.proxy_config.port}/proxy/add_model"
-                    with httpx.Client() as client:
-                        response = client.post(proxy_url, json=model_data, timeout=5.0)
-                        if response.status_code == 200:
-                            logger.debug(f"Registered model '{model_config.name}' with proxy")
-                        else:
-                            logger.warning(
-                                f"Failed to register model with proxy: {response.text}"
-                            )
-                    
-                    # Also register any aliases
-                    aliases = model_config.config_overrides.get("aliases", [])
-                    for alias in aliases:
-                        alias_data = model_data.copy()
-                        alias_data["name"] = alias
-                        response = client.post(proxy_url, json=alias_data, timeout=5.0)
-                        if response.status_code == 200:
-                            logger.debug(f"Registered alias '{alias}' with proxy")
-                        
-                except Exception as e:
-                    logger.warning(f"Failed to register model with proxy: {e}")
-                    # Don't fail model start if proxy registration fails
-
             logger.info(
-                f"Started vLLM server for '{model_config.name}' "
+                f"Started vLLM server process for '{model_config.name}' "
                 f"on port {model_config.port} using GPUs {model_config.gpu_ids}"
             )
+
+            # Note: Registration with proxy will happen after startup completes
+            # This is handled by wait_and_register_model() from start_all_models()
+
             return True
 
         except Exception as e:
             logger.error(f"Failed to start model '{model_config.name}': {e}")
             return False
+
+    def wait_and_register_model(self, model_config: ModelConfig) -> bool:
+        """
+        Wait for a model to complete startup and register it with the proxy.
+
+        Args:
+            model_config: Configuration for the model
+
+        Returns:
+            True if model started and registered successfully
+        """
+        if model_config.name not in self.vllm_servers:
+            logger.error(f"Model '{model_config.name}' not found in servers")
+            return False
+
+        server = self.vllm_servers[model_config.name]
+
+        # Wait for server to complete startup
+        if not server.wait_for_startup():
+            logger.error(f"Server '{model_config.name}' failed to complete startup")
+            # Clean up the failed server
+            server.stop()
+            del self.vllm_servers[model_config.name]
+            return False
+
+        # Register with proxy if it's running
+        if self.proxy_process and self.proxy_process.is_running():
+            # Prepare model configuration for proxy
+            model_data = {
+                "name": model_config.name,
+                "port": model_config.port,
+                "model_path": model_config.model_path,
+                "gpu_ids": model_config.gpu_ids,
+                **model_config.config_overrides,
+            }
+
+            # Register model with proxy via HTTP API
+            if self._proxy_api_request("POST", "/proxy/add_model", model_data):
+                logger.debug(f"Registered model '{model_config.name}' with proxy")
+
+                # Also register any aliases
+                aliases = model_config.config_overrides.get("aliases", [])
+                for alias in aliases:
+                    alias_data = model_data.copy()
+                    alias_data["name"] = alias
+                    if self._proxy_api_request("POST", "/proxy/add_model", alias_data):
+                        logger.debug(f"Registered alias '{alias}' with proxy")
+
+        logger.info(f"Model '{model_config.name}' is ready and registered")
+        return True
 
     def stop_model(self, model_name: str) -> bool:
         """
@@ -182,27 +243,21 @@ class ProxyManager:
 
             # Remove from proxy if it's running
             if self.proxy_process and self.proxy_process.is_running():
-                try:
-                    import httpx
-                    
-                    # Remove model from proxy via HTTP API
-                    proxy_url = f"http://localhost:{self.proxy_config.port}/proxy/remove_model/{model_name}"
-                    with httpx.Client() as client:
-                        response = client.delete(proxy_url, timeout=5.0)
-                        if response.status_code == 200:
-                            logger.debug(f"Removed model '{model_name}' from proxy")
-                        else:
-                            logger.warning(
-                                f"Failed to remove model from proxy: {response.text}"
-                            )
-                    
-                    # Also remove any aliases
-                    # Note: We'd need to track aliases per model to remove them properly
-                    # For now, the proxy will handle orphaned aliases
-                    
-                except Exception as e:
-                    logger.warning(f"Failed to remove model from proxy: {e}")
-                    # Don't fail model stop if proxy unregistration fails
+                # Remove main model from proxy
+                if self._proxy_api_request(
+                    "DELETE", f"/proxy/remove_model/{model_name}"
+                ):
+                    logger.debug(f"Removed model '{model_name}' from proxy")
+
+                # Also remove any aliases
+                model_config = self._get_model_config_by_name(model_name)
+                if model_config:
+                    aliases = model_config.config_overrides.get("aliases", [])
+                    for alias in aliases:
+                        if self._proxy_api_request(
+                            "DELETE", f"/proxy/remove_model/{alias}"
+                        ):
+                            logger.debug(f"Removed alias '{alias}' from proxy")
 
             logger.info(f"Stopped vLLM server for '{model_name}'")
             return True
@@ -218,13 +273,42 @@ class ProxyManager:
         Returns:
             Number of models successfully started
         """
-        started = 0
+        # First, start all model processes concurrently
+        started_configs = []
         for model_config in self.proxy_config.models:
-            if model_config.enabled and self.start_model(model_config):
-                started += 1
-                # Add a small delay between starts to avoid resource conflicts
-                time.sleep(2)
-        return started
+            if model_config.enabled:
+                if self.start_model(model_config):
+                    started_configs.append(model_config)
+                    # Small delay to avoid resource conflicts but not wait for startup
+                    time.sleep(0.5)
+
+        # Now wait for all started models to complete startup and register them
+        successfully_started = 0
+        for model_config in started_configs:
+            if self.wait_and_register_model(model_config):
+                successfully_started += 1
+
+        return successfully_started
+
+    def start_all_models_no_wait(self) -> int:
+        """
+        Start all model processes without waiting for startup completion.
+
+        This method starts all model servers concurrently and returns immediately,
+        allowing the caller to monitor startup progress in real-time.
+
+        Returns:
+            Number of model processes successfully launched
+        """
+        started_count = 0
+        for model_config in self.proxy_config.models:
+            if model_config.enabled:
+                if self.start_model(model_config):
+                    started_count += 1
+                    # Small delay to avoid resource conflicts
+                    time.sleep(0.5)
+
+        return started_count
 
     def _build_vllm_config(self, model_config: ModelConfig) -> Dict[str, Any]:
         """
@@ -354,8 +438,12 @@ class ProxyManager:
             self.stop_model(model_name)
             time.sleep(2)  # Wait before restarting
 
-        # Start again
-        return self.start_model(model_config)
+        # Start the model
+        if not self.start_model(model_config):
+            return False
+
+        # Wait for startup and register
+        return self.wait_and_register_model(model_config)
 
     def allocate_gpus_automatically(self) -> List[ModelConfig]:
         """
@@ -457,4 +545,3 @@ class ProxyManager:
         proxy_config.models = models
 
         return cls(proxy_config)
-

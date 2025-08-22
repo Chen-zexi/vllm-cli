@@ -179,7 +179,7 @@ class ProxyServerProcess:
         # Pass the configuration as JSON (for models and other complex data)
         import json
 
-        config_json = json.dumps(self.config.dict())
+        config_json = json.dumps(self.config.model_dump())
         cmd.extend(["--config-json", config_json])
 
         return cmd

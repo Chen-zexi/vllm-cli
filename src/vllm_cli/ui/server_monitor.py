@@ -267,13 +267,15 @@ def monitor_active_servers() -> str:
         if confirm:
             # Import here to avoid circular dependency
             from . import menu
-            
+
             # Check if there's an active proxy manager
             if menu._active_proxy_manager:
                 # Use proxy manager to stop all proxy-managed servers
-                console.print("[yellow]Stopping proxy and all managed servers...[/yellow]")
+                console.print(
+                    "[yellow]Stopping proxy and all managed servers...[/yellow]"
+                )
                 menu._active_proxy_manager.stop_proxy()
-                
+
                 # Clear the global proxy manager reference
                 menu._active_proxy_manager = None
                 menu._active_proxy_config = None
@@ -281,7 +283,7 @@ def monitor_active_servers() -> str:
                 # No proxy manager, use the standard approach
                 for server in servers:
                     server.stop()
-                    
+
             console.print("[green]All servers stopped.[/green]")
             input("\nPress Enter to continue...")
     elif action.startswith("Monitor Server"):
