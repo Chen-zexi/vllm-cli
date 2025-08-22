@@ -5,6 +5,7 @@
 [![PyPI version](https://badge.fury.io/py/vllm-cli.svg)](https://badge.fury.io/py/vllm-cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![PyPI Downloads](https://static.pepy.tech/badge/vllm-cli)](https://pepy.tech/projects/vllm-cli)
 
 A command-line interface tool for serving Large Language Models using vLLM. Provides both interactive and command-line modes with features for configuration profiles, model management, and server monitoring.
 
@@ -75,39 +76,68 @@ For complete documentation, see the [🌐 Multi-Model Proxy Guide](docs/multi-mo
 
 ## Quick Start
 
+### Important: vLLM Installation Notes
+⚠️ **Binary Compatibility Warning**: vLLM contains pre-compiled CUDA kernels that must match your PyTorch version exactly. Installing mismatched versions will cause errors.
+
+vLLM-CLI will not install vLLM or Pytorch by default.
+
 ### Installation
 
+#### Option 1: Install vLLM seperately and then install vLLM CLI (Recommended)
 ```bash
-# Install from PyPI
-# Make sure you activate the environment you have vllm installed in
-pip install --upgrade vllm-cli
+# Install vLLM -- Skip this step if you have vllm installed in your environment
+uv venv --python 3.12 --seed
+source .venv/bin/activate
+uv pip install vllm-cli[vllm] --torch-backend=auto
+# Or specify a backend: uv pip install vllm-cli[vllm] --torch-backend=cu129
 
-# Or build from source
+# Install vLLM CLI
+uv pip install --upgrade vllm-cli
+uv run vllm-cli
+
+# If you are using conda:
+# Activate the environment you have vllm installed in
+pip install vllm-cli
+vllm-cli
+```
+#### Option 2: Install vLLM CLI + vLLM
+
+```bash
+# Install vLLM CLI + vLLM
+pip install vllm-cli[vllm]
+vllm-cli
+```
+
+#### Option 3: Build from source (You still need to install vLLM seperately)
+```bash
 git clone https://github.com/Chen-zexi/vllm-cli.git
 cd vllm-cli
 pip install -e .
 ```
 
-#### For Isolated Installation (pipx/system packages)
+#### Option 4: For Isolated Installation (pipx/system packages)
+
+⚠️ **Compatibility Note:** pipx creates isolated environments which may have compatibility issues with vLLM's CUDA dependencies. Consider using uv or conda (see above) for better PyTorch/CUDA compatibility.
 
 ```bash
 # If you do not want to use virtual environment and want to install vLLM along with vLLM CLI
 pipx install "vllm-cli[vllm]"
-```
 
-**⚠️ Note:** This will install vLLM >= 0.10.0
+# If you want to install pre-release version
+pipx install --pip-args="--pre" "vllm-cli[vllm]"
+```
 
 ### Prerequisites
 - Python 3.9+
 - CUDA-compatible GPU (recommended)
 - vLLM package installed
+- For dependency issues, see [Troubleshooting Guide](docs/troubleshooting.md#dependency-conflicts)
 
 ### Basic Usage
 
 ```bash
 # Interactive mode - menu-driven interface
-vllm-cli
-
+vllm-cl
 # Serve a model
 vllm-cli serve --model openai/gpt-oss-20b
 
