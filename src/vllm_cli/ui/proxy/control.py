@@ -212,8 +212,42 @@ def configure_model_for_proxy(
     else:
         console.print(f"\n[cyan]Configure Model #{index + 1}[/cyan]")
 
-    # Select model using existing UI
-    model_selection = select_model()
+    # Import here to avoid circular dependency
+    from ...config import ConfigManager
+    from ..model_manager import select_shortcut_for_serving
+    from ..navigation import unified_prompt
+
+    config_manager = ConfigManager()
+    shortcuts = config_manager.list_shortcuts()
+
+    # First ask if user wants to use shortcut or select model
+    model_source_choices = []
+    if shortcuts:
+        model_source_choices.append("Use saved shortcut")
+    model_source_choices.extend(
+        [
+            "Select from models",
+        ]
+    )
+
+    source_choice = unified_prompt(
+        "model_source_proxy",
+        "How would you like to configure this model?",
+        model_source_choices,
+        allow_back=True,
+    )
+
+    if not source_choice or source_choice == "BACK":
+        return None
+
+    model_selection = None
+    if source_choice == "Use saved shortcut":
+        # Handle shortcut selection directly
+        model_selection = select_shortcut_for_serving()
+    else:
+        # Select model using existing UI
+        model_selection = select_model()
+
     if not model_selection:
         return None
 

@@ -9,7 +9,7 @@ import re
 import threading
 import time
 from threading import Thread
-from typing import TYPE_CHECKING, Dict, Optional
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 from rich import box
 from rich.align import Align
@@ -453,14 +453,59 @@ def monitor_startup_progress(proxy_manager: "ProxyManager") -> bool:
     success_count = sum(1 for s in startup_status.values() if s == "ready")
     fail_count = sum(1 for s in startup_status.values() if s == "failed")
 
+    # Get list of failed models
+    failed_models = [
+        name for name, status in startup_status.items() if status == "failed"
+    ]
+
     if fail_count > 0:
         console.print(f"\n[red]✗ {fail_count} model(s) failed to start[/red]")
+
+        # Offer to view logs for failed models
+        if failed_models:
+            handle_failed_models(proxy_manager, failed_models)
+
         return False
     else:
         console.print(
             f"\n[green]✓ All {success_count} model(s) started successfully[/green]"
         )
         return True
+
+
+def handle_failed_models(
+    proxy_manager: "ProxyManager", failed_models: List[str]
+) -> None:
+    """
+    Handle failed models by offering log viewing options.
+
+    Args:
+        proxy_manager: The ProxyManager instance
+        failed_models: List of model names that failed to start
+    """
+    from ..log_viewer import show_log_menu
+
+    for model_name in failed_models:
+        if model_name in proxy_manager.vllm_servers:
+            server = proxy_manager.vllm_servers[model_name]
+            console.print(f"\n[yellow]Model '{model_name}' failed to start[/yellow]")
+
+            # Show last few log lines
+            recent_logs = server.get_recent_logs(5)
+            if recent_logs:
+                console.print("[bold]Last logs:[/bold]")
+                for log in recent_logs:
+                    console.print(f"  {log}")
+
+            # Offer to view full logs
+            view_logs = (
+                input(f"\nView full logs for {model_name}? (y/N): ").strip().lower()
+            )
+            if view_logs in ["y", "yes"]:
+                show_log_menu(server)
+            else:
+                if server.log_path:
+                    console.print(f"[dim]Log file: {server.log_path}[/dim]")
 
 
 def refresh_model_registry(proxy_manager: "ProxyManager"):
@@ -940,14 +985,8 @@ def monitor_model_engine(
         )
         layout["header"].update(Padding(header_text, (1, 0)))
 
-        # Footer with model list
-        other_models = [m for m in proxy_manager.vllm_servers.keys() if m != model_name]
+        # Footer
         footer_text = "Press Ctrl+C for menu options"
-        if other_models:
-            footer_text += f" • Other models: {', '.join(other_models[:3])}"
-            if len(other_models) > 3:
-                footer_text += f" (+{len(other_models)-3} more)"
-
         layout["footer"].update(Align.center(Text(footer_text, style="dim cyan")))
 
         # Track operation state for completion detection
@@ -961,6 +1000,9 @@ def monitor_model_engine(
             "notification_shown_until": None,  # Show notification for 5 seconds
             "exit_after": None,  # Track when to auto-exit after completion
         }
+
+        # Flag to track if server failed during monitoring
+        server_failed = False
 
         with Live(layout, console=console, refresh_per_second=monitor_refresh_rate):
             while True:
@@ -1244,15 +1286,32 @@ def monitor_model_engine(
 
                 # Check if server is still running
                 if not server.is_running():
-                    console.print(
-                        f"\n[red]Model engine '{model_name}' has stopped.[/red]"
-                    )
+                    # Set flag to handle failure after exiting Live display
+                    server_failed = True
                     break
 
                 time.sleep(0.5)
 
     except KeyboardInterrupt:
         pass
+
+    # Handle server failure after Live display has ended
+    if server_failed:
+        console.print(f"\n[red]Model engine '{model_name}' has stopped.[/red]")
+
+        # Show last few log lines to help diagnose
+        recent_logs = server.get_recent_logs(10)
+        if recent_logs:
+            console.print("\n[bold]Last logs before failure:[/bold]")
+            for log in recent_logs[-5:]:  # Show last 5 lines
+                console.print(f"  {log}")
+
+        # Offer to view full logs
+        view_logs = input(f"\nView full logs for {model_name}? (y/N): ").strip().lower()
+        if view_logs in ["y", "yes"]:
+            from ..log_viewer import show_log_menu
+
+            show_log_menu(server)
 
     # Display operation-specific completion summary
     if operation_state.get("completed"):

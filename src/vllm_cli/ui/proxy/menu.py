@@ -146,9 +146,33 @@ def add_new_model_to_proxy(proxy_manager, proxy_config) -> None:
         return result
     else:
         console.print(f"[red]✗ Failed to start model {new_model.name}[/red]")
+
+        # Offer to view logs if server was created
+        if new_model.name in proxy_manager.vllm_servers:
+            server = proxy_manager.vllm_servers[new_model.name]
+
+            # Show last few log lines
+            recent_logs = server.get_recent_logs(5)
+            if recent_logs:
+                console.print("\n[bold]Last logs:[/bold]")
+                for log in recent_logs:
+                    console.print(f"  {log}")
+
+            # Offer to view full logs
+            view_logs = (
+                input(f"\nView full logs for {new_model.name}? (y/N): ").strip().lower()
+            )
+            if view_logs in ["y", "yes"]:
+                from ..log_viewer import show_log_menu
+
+                show_log_menu(server)
+            else:
+                if server.log_path:
+                    console.print(f"[dim]Log file: {server.log_path}[/dim]")
+                input("\nPress Enter to continue...")
+
         # Remove from config if failed
         proxy_config.models.remove(new_model)
-        input("\nPress Enter to continue...")
 
 
 def manage_existing_models(proxy_manager, proxy_config) -> None:
@@ -331,6 +355,25 @@ def manage_existing_models(proxy_manager, proxy_config) -> None:
         else:
             console.print(f"[red]✗ Failed to start {model.name}[/red]")
 
+            # Offer to view logs if server was created
+            if model.name in proxy_manager.vllm_servers:
+                server = proxy_manager.vllm_servers[model.name]
+
+                # Show last few log lines
+                recent_logs = server.get_recent_logs(5)
+                if recent_logs:
+                    console.print("\n[bold]Last logs:[/bold]")
+                    for log in recent_logs:
+                        console.print(f"  {log}")
+
+                # Offer to view full logs
+                view_logs = input("\nView full logs? (y/N): ").strip().lower()
+                if view_logs in ["y", "yes"]:
+                    from ..log_viewer import show_log_menu
+
+                    show_log_menu(server)
+                    return manage_existing_models(proxy_manager, proxy_config)
+
     elif "Restart" in action:
         console.print(f"\n[cyan]Restarting {model.name}...[/cyan]")
         proxy_manager.stop_model(model.name)
@@ -353,6 +396,25 @@ def manage_existing_models(proxy_manager, proxy_config) -> None:
             return monitor_individual_model_by_name(proxy_manager, model.name)
         else:
             console.print(f"[red]✗ Failed to restart {model.name}[/red]")
+
+            # Offer to view logs if server was created
+            if model.name in proxy_manager.vllm_servers:
+                server = proxy_manager.vllm_servers[model.name]
+
+                # Show last few log lines
+                recent_logs = server.get_recent_logs(5)
+                if recent_logs:
+                    console.print("\n[bold]Last logs:[/bold]")
+                    for log in recent_logs:
+                        console.print(f"  {log}")
+
+                # Offer to view full logs
+                view_logs = input("\nView full logs? (y/N): ").strip().lower()
+                if view_logs in ["y", "yes"]:
+                    from ..log_viewer import show_log_menu
+
+                    show_log_menu(server)
+                    return manage_existing_models(proxy_manager, proxy_config)
 
     elif "Remove model" in action:
         if inquirer.confirm(f"\nRemove {model.name} from proxy?", default=False):

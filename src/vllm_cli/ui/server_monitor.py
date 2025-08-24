@@ -266,19 +266,16 @@ def monitor_active_servers() -> str:
         confirm = inquirer.confirm(f"Stop all {len(servers)} servers?", default=False)
         if confirm:
             # Import here to avoid circular dependency
-            from . import menu
+            from .proxy.menu import get_active_proxy
 
             # Check if there's an active proxy manager
-            if menu._active_proxy_manager:
+            active_proxy_manager, _ = get_active_proxy()
+            if active_proxy_manager:
                 # Use proxy manager to stop all proxy-managed servers
                 console.print(
                     "[yellow]Stopping proxy and all managed servers...[/yellow]"
                 )
-                menu._active_proxy_manager.stop_proxy()
-
-                # Clear the global proxy manager reference
-                menu._active_proxy_manager = None
-                menu._active_proxy_config = None
+                active_proxy_manager.stop_proxy()
             else:
                 # No proxy manager, use the standard approach
                 for server in servers:

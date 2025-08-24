@@ -814,10 +814,10 @@ def start_server_with_config(config: Dict[str, Any]) -> str:
                 show_log_menu(server)
             else:
                 console.print(f"\n[dim]Full log file: {server.log_path}[/dim]")
+                input("\nPress Enter to continue...")
 
     except Exception as e:
         logger.error(f"Error starting server: {e}")
         console.print(f"[red]Error starting server: {e}[/red]")
-
-    input("\nPress Enter to continue...")
+        input("\nPress Enter to continue...")
     return "continue"

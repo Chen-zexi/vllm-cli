@@ -266,6 +266,16 @@
       "cli_flag": "--chat-template",
       "importance": "low"
     },
+    "chat_template_content_format": {
+      "type": "choice",
+      "category": "api",
+      "description": "Format of content in chat templates",
+      "default": "string",
+      "cli_flag": "--chat-template-content-format",
+      "choices": ["string", "json"],
+      "importance": "low",
+      "hint": "Use 'json' for models with tool/function calling support"
+    },
     "response_role": {
       "type": "string",
       "category": "api",

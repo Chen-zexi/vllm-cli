@@ -298,30 +298,34 @@ def configure_category_arguments(
             importance = arg_info.get("importance", "low")
             description = arg_info.get("description", "")
 
-            # Format display string with better formatting
+            # Format display string WITHOUT Rich markup for inquirer
             if current_value is not None and arg_name in config:
                 # Configured value (user set)
-                value_str = f"[bold green]{current_value}[/bold green]"
+                value_str = str(current_value)
                 status_icon = "●"
             elif current_value is not None:
                 # Default value
-                value_str = f"[dim]{current_value}[/dim]"
+                value_str = f"({current_value})"
                 status_icon = "○"
             else:
                 # Not set
-                value_str = "[dim italic]not set[/dim italic]"
+                value_str = ""
                 status_icon = "○"
 
             # Add importance indicator
             if importance in ["high", "critical"]:
                 importance_icon = "!"
             else:
-                importance_icon = "  "
+                importance_icon = " "
 
-            # Create display string with description
-            display = f"{status_icon} {importance_icon} {arg_name}: {value_str}"
+            # Create display string with description (plain text for inquirer)
+            if value_str:
+                display = f"{status_icon} {importance_icon} {arg_name}: {value_str}"
+            else:
+                display = f"{status_icon} {importance_icon} {arg_name}"
+
             if description and len(description) < 40:
-                display += f" [dim]- {description[:40]}[/dim]"
+                display += f" - {description[:40]}"
 
             arg_choices.append(display)
             arg_map[display] = arg_info
@@ -377,27 +381,30 @@ def configure_advanced_list(
             importance = arg_info.get("importance", "low")
             # description = arg_info.get("description", "")  # Reserved for future use
 
-            # Format display string with better indicators
+            # Format display string WITHOUT Rich markup for inquirer
             if current_value is not None and arg_name in config:
                 # User configured
-                value_str = f"[bold green]{current_value}[/bold green]"
+                value_str = str(current_value)
                 status_icon = "●"
             elif current_value is not None:
                 # Default value
-                value_str = f"[dim]{current_value}[/dim]"
+                value_str = f"({current_value})"
                 status_icon = "○"
             else:
                 # Not set
-                value_str = "[dim italic]not set[/dim italic]"
+                value_str = ""
                 status_icon = "○"
 
             # Add importance indicator
             if importance in ["high", "critical"]:
                 importance_icon = "!"
             else:
-                importance_icon = "  "
+                importance_icon = " "
 
-            display = f"{status_icon} {importance_icon} {arg_name}: {value_str}"
+            if value_str:
+                display = f"{status_icon} {importance_icon} {arg_name}: {value_str}"
+            else:
+                display = f"{status_icon} {importance_icon} {arg_name}"
 
             arg_choices.append(display)
             arg_map[display] = arg_info

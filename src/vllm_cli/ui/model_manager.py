@@ -233,27 +233,12 @@ def select_model() -> Optional[Any]:
     console.print("\n[bold cyan]Model Selection[/bold cyan]")
 
     try:
-        # Import here to avoid circular dependency
-        from ..config import ConfigManager
-
-        # Check if shortcuts are available
-        config_manager = ConfigManager()
-        shortcuts = config_manager.list_shortcuts()
-
         # First, ask if user wants to use local or remote model
-        model_source_choices = []
-
-        # Add shortcut option if shortcuts exist
-        if shortcuts:
-            model_source_choices.append("Use saved shortcut")
-
-        model_source_choices.extend(
-            [
-                "Select from local models",
-                "Serve model with LoRA adapters",
-                "Use a model from HuggingFace Hub (auto-download)",
-            ]
-        )
+        model_source_choices = [
+            "Select from local models",
+            "Serve model with LoRA adapters",
+            "Use a model from HuggingFace Hub (auto-download)",
+        ]
 
         source_choice = unified_prompt(
             "model_source",
@@ -264,10 +249,6 @@ def select_model() -> Optional[Any]:
 
         if not source_choice or source_choice == "BACK":
             return None
-
-        if source_choice == "Use saved shortcut":
-            # Handle shortcut selection
-            return select_shortcut_for_serving()
 
         if source_choice == "Use a model from HuggingFace Hub (auto-download)":
             return enter_remote_model()
