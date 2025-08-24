@@ -62,6 +62,7 @@ The Multi-Model Proxy is a new experimental feature that enables serving multipl
 **What It Does:**
 - **Single Endpoint** - All your models accessible through one API
 - **Live Management** - Add or remove models without stopping the service
+- **Dynamic GPU Management** - Efficient GPU resource distribution through vLLM's sleep/wake functionality
 - **Interactive Setup** - User-friendly wizard guides you through configuration
 
 **You can install the pre-release version with:**

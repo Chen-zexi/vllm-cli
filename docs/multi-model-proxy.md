@@ -1,15 +1,15 @@
 # Multi-Model Proxy Server (Experimental)
 
-The Multi-Model Proxy is an experimental feature that enables serving multiple language models through a single unified API endpoint, with efficient GPU resource distribution and centralized management.
+The Multi-Model Proxy is an experimental feature that enables serving multiple language models through a single unified API endpoint, with dynamic model management, efficient GPU resource distribution through sleep/wake functionality, and centralized management.
 
 ## Overview
 
 The proxy server acts as a smart router that:
 - Routes requests to multiple vLLM instances based on model name
-- Manages GPU allocation across different models
+- **NEW**: Dynamically adds/removes models without proxy restart
+- **NEW**: Manages GPU memory through model sleep/wake functionality
 - Provides a single OpenAI-compatible endpoint for all models
-- Tracks request statistics and health status
-- Handles model lifecycle management
+- Tracks request statistics and health status with enhanced state monitoring
 
 ## Getting Started
 
@@ -70,6 +70,57 @@ After configuration, choose:
 - **Start without saving** - One-time use
 - **Cancel** - Abort setup
 
+## Dynamic Model Management (NEW)
+
+The proxy now supports adding and removing models at runtime without restarting:
+
+### Adding Models Dynamically
+While the proxy is running, you can:
+1. From the proxy management menu, select **"Add new model"**
+2. Configure the model settings (same as initial setup)
+3. The model will be automatically registered and activated
+4. Existing models continue serving requests uninterrupted
+
+### Removing Models
+1. From the proxy management menu, select **"Remove model"**
+2. Choose the model to remove from the list
+3. The model will be gracefully stopped and unregistered
+4. Other models remain unaffected
+
+### Model Registration Lifecycle
+The system automatically handles:
+- **Pre-registration**: Models are registered before fully ready (shown as "pending")
+- **Verification**: Continuous health checks verify model availability
+- **Activation**: Models become available once verified
+- **Error Recovery**: Failed models can be restarted without affecting others
+
+## Model Sleep/Wake for GPU Memory Management (NEW)
+
+Models can now be put to "sleep" to free GPU memory while keeping their ports active:
+
+### Sleep Modes
+- **Sleep Level 1 (CPU Offload)**:
+  - Moves model weights to CPU RAM
+  - Frees most GPU memory
+  - Faster wake-up time
+  - Ideal for models that need quick reactivation
+
+- **Sleep Level 2 (Full Discard)**:
+  - Completely frees GPU memory
+  - Model weights are discarded
+  - Slower wake-up (full reload required)
+  - Maximum memory savings
+
+### Using Sleep/Wake
+
+#### Interactive UI
+1. While monitoring the proxy, select **"Manage models"**
+2. Choose a model and select **"Put to sleep"**
+3. Select the desired sleep level
+4. The UI shows real-time progress (e.g., "Sleep completed in 17.89 seconds")
+5. Memory savings are displayed (e.g., "Freed 90.40 GiB, 3.30 GiB still in use")
+
+
 ## Managing Running Proxy
 
 Once started, the proxy management interface offers:
@@ -83,8 +134,13 @@ Once started, the proxy management interface offers:
 
 - **Monitor model logs** - View individual model engine logs or overview (combined logs)
   - Select specific model to monitor
-  - Real-time log streaming
-  - Server health status
+  - Server health status with state indicators
+
+- **Manage models** (NEW) - Dynamic model control
+  - Add new models to running proxy
+  - Remove models without affecting others
+  - Put models to sleep or wake them up
+  - View detailed model states and memory usage
 
 ### Server Control
 - **Stop all servers** - Gracefully shutdown proxy and all models
@@ -93,29 +149,6 @@ Once started, the proxy management interface offers:
 ## Using the Proxy
 
 Once running, access your models through proxy port (default: 8000) and make requests to the proxy endpoint.
-
-## Key Features
-
-### Intelligent Routing
-- Automatic request routing based on model name
-- Support for model aliases
-- Health-aware routing (skip unhealthy backends)
-
-### Resource Management
-- Flexible GPU assignment per model
-- Automatic conflict detection for GPU assignments
-
-### Monitoring & Observability
-- Real-time request tracking
-- Per-model request statistics
-- Unified log viewing
-- GPU utilization monitoring
-- Backend health status
-
-### Configuration Management
-- Save and reuse proxy configurations
-- Quick start from saved configs
-- Export/import configurations
 
 ## Architecture
 
@@ -133,7 +166,19 @@ Once running, access your models through proxy port (default: 8000) and make req
 Model A        Model B         Model C
 Port: 8001     Port: 8002      Port: 8003
 GPU: 0         GPU: 1          GPU: 2,3
+State: Running State: Sleeping State: Running
 ```
+
+### Model Lifecycle
+1. **Pre-registration** → Model allocated resources, shown as "pending"
+2. **Verification** → Health checks confirm model is ready
+3. **Activation** → Model available for serving requests
+4. **Runtime States**:
+   - Running: Actively serving
+   - Sleeping: GPU memory freed, port active
+   - Starting: Initializing or waking
+   - Stopped: Gracefully stopped
+5. **Dynamic Management** → Add/remove/sleep/wake without proxy restart
 
 ## Known Limitations
 Currently, the proxy server only supports one model per GPU.
