@@ -354,7 +354,7 @@ class TestProxyE2E:
 
                 # Start everything
                 with patch("time.sleep"):
-                    started = manager.start_all_models()
+                    started = manager.start_all_models_no_wait()
                     assert started == 2
 
                     result = manager.start_proxy()
@@ -396,13 +396,281 @@ class TestProxyE2E:
             proxy_config.models[0].model_dump(),
         )
 
-        # Verify the backend is registered but will fail when accessed
+        # Verify the backend is registered
         assert (
             proxy_server.router.route_request("unavailable") == "http://127.0.0.1:29999"
         )
 
-        # Mark backend as unhealthy (which would happen on real health check)
-        proxy_server.router.mark_backend_health("unavailable", False)
+        # In the new architecture, health is managed by registry, not router
+        # The router will still return the URL even if backend is unavailable
+        # The actual error would occur when trying to forward the request
 
-        # Now routing should return None for unhealthy backend
-        assert proxy_server.router.route_request("unavailable") is None
+    @pytest.mark.asyncio
+    async def test_e2e_full_model_lifecycle_with_registry(self, mock_vllm_servers):
+        """Test complete model lifecycle with registry states."""
+        proxy_config = ProxyConfig(
+            host="127.0.0.1",
+            port=get_free_port(),
+            models=[
+                ModelConfig(
+                    name="lifecycle-model",
+                    model_path="test/lifecycle",
+                    port=mock_vllm_servers[0].port,
+                    gpu_ids=[0],
+                    enabled=True,
+                ),
+            ],
+        )
+
+        proxy_server = ProxyServer(proxy_config)
+
+        # Step 1: Pre-register model (PENDING state)
+        result = proxy_server.registry.pre_register(
+            mock_vllm_servers[0].port, [0], "lifecycle-model"
+        )
+        assert result is True
+
+        entry = proxy_server.registry.get_model(mock_vllm_servers[0].port)
+        assert entry.status.value == "pending"
+        assert entry.state.value == "starting"
+
+        # Step 2: Verify and activate (AVAILABLE/RUNNING state)
+        result = proxy_server.registry.verify_and_activate(
+            mock_vllm_servers[0].port, "lifecycle-model-actual"
+        )
+        assert result is True
+
+        entry = proxy_server.registry.get_model(mock_vllm_servers[0].port)
+        assert entry.status.value == "available"
+        assert entry.state.value == "running"
+
+        # Step 3: Sleep the model
+        from vllm_cli.proxy.registry import ModelState
+
+        proxy_server.registry.update_model_state(
+            mock_vllm_servers[0].port, ModelState.SLEEPING
+        )
+        entry.sleep_level = 2
+
+        entry = proxy_server.registry.get_model(mock_vllm_servers[0].port)
+        assert entry.state.value == "sleeping"
+        assert entry.sleep_level == 2
+
+        # Step 4: Wake the model
+        proxy_server.registry.update_model_state(
+            mock_vllm_servers[0].port, ModelState.RUNNING
+        )
+        entry.sleep_level = 0
+
+        entry = proxy_server.registry.get_model(mock_vllm_servers[0].port)
+        assert entry.state.value == "running"
+        assert entry.sleep_level == 0
+
+        # Step 5: Mark as error
+        proxy_server.registry.mark_model_error(mock_vllm_servers[0].port, "Test error")
+
+        entry = proxy_server.registry.get_model(mock_vllm_servers[0].port)
+        assert entry.status.value == "error"
+        assert entry.error_message == "Test error"
+
+        # Step 6: Remove model
+        result = proxy_server.registry.remove_model(mock_vllm_servers[0].port)
+        assert result is True
+        assert proxy_server.registry.get_model(mock_vllm_servers[0].port) is None
+
+    @pytest.mark.asyncio
+    async def test_e2e_concurrent_model_registration(self, mock_vllm_servers):
+        """Test concurrent registration of multiple models."""
+        import asyncio
+
+        proxy_config = ProxyConfig(
+            host="127.0.0.1",
+            port=get_free_port(),
+        )
+
+        proxy_server = ProxyServer(proxy_config)
+
+        # Pre-register multiple models concurrently
+        for i, server in enumerate(mock_vllm_servers):
+            # Simulate concurrent pre-registration
+            result = proxy_server.registry.pre_register(
+                server.port, [i], f"concurrent-model-{i}"
+            )
+            assert result is True
+
+        # All should be pending
+        all_models = proxy_server.registry.get_all_models()
+        assert len(all_models) == len(mock_vllm_servers)
+        assert all(m.status.value == "pending" for m in all_models.values())
+
+        # Simulate concurrent verification
+        async def verify_model(port, name):
+            """Simulate model verification."""
+            await asyncio.sleep(0.1)  # Simulate network delay
+            return proxy_server.registry.verify_and_activate(port, f"{name}-actual")
+
+        # Verify all models concurrently
+        verify_tasks = [
+            verify_model(server.port, f"concurrent-model-{i}")
+            for i, server in enumerate(mock_vllm_servers)
+        ]
+
+        results = await asyncio.gather(*verify_tasks)
+
+        # All should succeed
+        assert all(results)
+
+        # All should now be available
+        available = proxy_server.registry.get_available_models()
+        assert len(available) == len(mock_vllm_servers)
+
+    @pytest.mark.asyncio
+    async def test_e2e_registry_persistence(self):
+        """Test registry state persistence across proxy restarts."""
+        from vllm_cli.proxy.registry import ModelRegistry
+
+        # Create first registry instance
+        registry1 = ModelRegistry()
+
+        # Add some models with different states
+        registry1.pre_register(18001, [0], "model1")
+        registry1.pre_register(18002, [1], "model2")
+        registry1.verify_and_activate(18002, "model2-actual")
+
+        # Get state summary
+        summary1 = registry1.get_status_summary()
+
+        # Simulate proxy restart - create new registry
+        registry2 = ModelRegistry()
+
+        # Registry starts empty after restart
+        assert len(registry2.models) == 0
+
+        # In real scenario, models would re-register on startup
+        # Simulate re-registration
+        registry2.pre_register(18001, [0], "model1")
+        registry2.pre_register(18002, [1], "model2")
+
+        # Verify model2 again (as it would happen on refresh)
+        registry2.verify_and_activate(18002, "model2-actual")
+
+        # State should be similar
+        summary2 = registry2.get_status_summary()
+        assert summary2["total_models"] == summary1["total_models"]
+        assert summary2["available"] == summary1["available"]
+
+    @pytest.mark.asyncio
+    async def test_e2e_stale_entry_cleanup_with_refresh(self, mock_vllm_servers):
+        """Test stale entry cleanup during refresh process."""
+        proxy_config = ProxyConfig(
+            host="127.0.0.1",
+            port=get_free_port(),
+        )
+
+        proxy_server = ProxyServer(proxy_config)
+
+        # Pre-register a model
+        proxy_server.registry.pre_register(
+            mock_vllm_servers[0].port, [0], "stale-test-model"
+        )
+
+        # Make it stale by setting old timestamp
+        import datetime as dt
+
+        old_time = dt.datetime.now() - dt.timedelta(minutes=10)
+        entry = proxy_server.registry.get_model(mock_vllm_servers[0].port)
+        entry.last_activity = old_time
+
+        # Add a fresh model
+        proxy_server.registry.pre_register(
+            mock_vllm_servers[1].port, [1], "fresh-test-model"
+        )
+
+        # Cleanup stale entries
+        removed = proxy_server.registry.cleanup_stale_entries(timeout_seconds=300)
+
+        assert removed == 1
+        assert proxy_server.registry.get_model(mock_vllm_servers[0].port) is None
+        assert proxy_server.registry.get_model(mock_vllm_servers[1].port) is not None
+
+    def test_e2e_gpu_allocation_conflicts(self):
+        """Test handling of GPU allocation conflicts."""
+        from vllm_cli.proxy.registry import ModelRegistry
+
+        registry = ModelRegistry()
+
+        # Register model on GPU 0
+        registry.pre_register(18001, [0], "gpu0-model")
+        registry.verify_and_activate(18001, "gpu0-model")
+
+        # Try to register another model on same GPU
+        registry.pre_register(18002, [0], "gpu0-conflict")
+
+        # Both should exist in registry
+        assert len(registry.models) == 2
+
+        # Check GPU usage tracking
+        gpu0_models = registry.get_models_on_gpu(0)
+        assert len(gpu0_models) == 2
+
+        # Status summary should show conflict
+        summary = registry.get_status_summary()
+        assert len(summary["gpu_usage"][0]) == 2
+
+    @pytest.mark.asyncio
+    async def test_e2e_dynamic_model_addition_removal(self):
+        """Test dynamic addition and removal of models during runtime."""
+        proxy_config = ProxyConfig(
+            host="127.0.0.1",
+            port=get_free_port(),
+        )
+
+        proxy_server = ProxyServer(proxy_config)
+
+        # Start with empty proxy
+        assert len(proxy_server.registry.models) == 0
+        assert len(proxy_server.router.backends) == 0
+
+        # Dynamically add model 1
+        proxy_server.registry.pre_register(18001, [0], "dynamic1")
+        proxy_server.registry.verify_and_activate(18001, "dynamic1-actual")
+        proxy_server.router.add_backend(
+            "dynamic1-actual", "http://localhost:18001", {"port": 18001}
+        )
+
+        assert len(proxy_server.registry.models) == 1
+        assert "dynamic1-actual" in proxy_server.router.backends
+
+        # Add model 2
+        proxy_server.registry.pre_register(18002, [1], "dynamic2")
+        proxy_server.registry.verify_and_activate(18002, "dynamic2-actual")
+        proxy_server.router.add_backend(
+            "dynamic2-actual", "http://localhost:18002", {"port": 18002}
+        )
+
+        assert len(proxy_server.registry.models) == 2
+        assert "dynamic2-actual" in proxy_server.router.backends
+
+        # Remove model 1
+        proxy_server.registry.remove_model(18001)
+        proxy_server.router.remove_backend("dynamic1-actual")
+
+        assert len(proxy_server.registry.models) == 1
+        assert "dynamic1-actual" not in proxy_server.router.backends
+        assert "dynamic2-actual" in proxy_server.router.backends
+
+        # Add model 3
+        proxy_server.registry.pre_register(18003, [2], "dynamic3")
+        proxy_server.registry.verify_and_activate(18003, "dynamic3-actual")
+        proxy_server.router.add_backend(
+            "dynamic3-actual", "http://localhost:18003", {"port": 18003}
+        )
+
+        # Final state: models 2 and 3
+        assert len(proxy_server.registry.models) == 2
+        available = proxy_server.registry.get_available_models()
+        assert len(available) == 2
+
+        ports = [e.port for e in available]
+        assert 18002 in ports
+        assert 18003 in ports

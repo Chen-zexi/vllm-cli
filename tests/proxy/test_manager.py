@@ -169,25 +169,100 @@ class TestProxyManager:
 
         assert result is False
 
+    def test_unregister_model_from_proxy_success(self, manager):
+        """Test successful model unregistration from proxy."""
+        # Setup proxy as running
+        mock_process = MagicMock()
+        mock_process.is_running.return_value = True
+        manager.proxy_process = mock_process
+
+        # Mock successful API request
+        with patch.object(manager, "_proxy_api_request") as mock_request:
+            mock_request.return_value = MagicMock()  # Non-None indicates success
+
+            result = manager.unregister_model_from_proxy(8001)
+
+            assert result is True
+            mock_request.assert_called_once_with("DELETE", "/proxy/models/8001")
+
+    def test_unregister_model_from_proxy_failure(self, manager):
+        """Test failed model unregistration from proxy."""
+        # Setup proxy as running
+        mock_process = MagicMock()
+        mock_process.is_running.return_value = True
+        manager.proxy_process = mock_process
+
+        # Mock failed API request
+        with patch.object(manager, "_proxy_api_request") as mock_request:
+            mock_request.return_value = None  # None indicates failure
+
+            result = manager.unregister_model_from_proxy(8001)
+
+            assert result is False
+            mock_request.assert_called_once_with("DELETE", "/proxy/models/8001")
+
+    def test_unregister_model_from_proxy_no_proxy(self, manager):
+        """Test unregistration when proxy is not running."""
+        # No proxy process
+        manager.proxy_process = None
+
+        # Should return True when proxy is not running
+        result = manager.unregister_model_from_proxy(8001)
+        assert result is True
+
+    def test_unregister_model_from_proxy_stopped_proxy(self, manager):
+        """Test unregistration when proxy process exists but is stopped."""
+        # Setup proxy as stopped
+        mock_process = MagicMock()
+        mock_process.is_running.return_value = False
+        manager.proxy_process = mock_process
+
+        # Should return True when proxy is not running
+        result = manager.unregister_model_from_proxy(8001)
+        assert result is True
+
+    def test_stop_model_with_proxy_unregistration(self, manager):
+        """Test that stop_model calls unregister_model_from_proxy."""
+        # Setup model server
+        mock_server = MagicMock()
+        mock_server.port = 8001
+        manager.vllm_servers["test-model"] = mock_server
+
+        # Setup proxy as running
+        mock_process = MagicMock()
+        mock_process.is_running.return_value = True
+        manager.proxy_process = mock_process
+
+        # Mock the API request
+        with patch.object(manager, "_proxy_api_request") as mock_request:
+            mock_request.return_value = MagicMock()  # Success
+
+            result = manager.stop_model("test-model")
+
+            assert result is True
+            assert "test-model" not in manager.vllm_servers
+            mock_server.stop.assert_called_once()
+            mock_request.assert_called_once_with("DELETE", "/proxy/models/8001")
+
     @patch("vllm_cli.proxy.manager.VLLMServer")
     @patch("time.sleep")
-    def test_start_all_models(self, mock_sleep, mock_server_class, manager):
-        """Test starting all enabled models."""
+    def test_start_all_models_no_wait(self, mock_sleep, mock_server_class, manager):
+        """Test starting all enabled models without waiting."""
         # Create mock servers
         mock_server = MagicMock()
         mock_server.start.return_value = True
         mock_server_class.return_value = mock_server
 
         # Proxy config has 2 enabled models
-        started = manager.start_all_models()
+        started = manager.start_all_models_no_wait()
 
         assert started == 2
         assert mock_server_class.call_count == 2
         assert len(manager.vllm_servers) == 2
 
     @patch("vllm_cli.proxy.manager.VLLMServer")
-    def test_start_all_models_some_disabled(self, mock_server_class, manager):
-        """Test starting models with some disabled."""
+    def test_start_all_models_no_wait_some_disabled(self, mock_server_class, manager):
+        """Test starting models with some disabled without waiting."""
         # Disable one model
         manager.proxy_config.models[1].enabled = False
 
@@ -196,7 +271,7 @@ class TestProxyManager:
         mock_server_class.return_value = mock_server
 
         with patch("time.sleep"):
-            started = manager.start_all_models()
+            started = manager.start_all_models_no_wait()
 
         assert started == 1
         assert mock_server_class.call_count == 1

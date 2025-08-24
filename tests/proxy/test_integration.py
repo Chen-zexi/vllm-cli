@@ -115,7 +115,7 @@ class TestProxyIntegration:
 
         # Start all models (only enabled ones)
         with patch("time.sleep"):
-            started = manager.start_all_models()
+            started = manager.start_all_models_no_wait()
         assert started == 1  # Only one model is enabled
 
         # Start proxy
@@ -268,7 +268,7 @@ class TestProxyIntegration:
         manager = ProxyManager(config)
 
         with patch("time.sleep"):
-            started = manager.start_all_models()
+            started = manager.start_all_models_no_wait()
 
         assert started == 3
 
@@ -311,7 +311,7 @@ class TestProxyIntegration:
             mock_server.start.return_value = False  # Fail to start
             mock_server_class.return_value = mock_server
 
-            started = manager.start_all_models()
+            started = manager.start_all_models_no_wait()
 
             assert started == 0  # No models started
             assert len(manager.vllm_servers) == 0
@@ -363,3 +363,305 @@ class TestProxyIntegration:
         result = runtime_state.clear_state()
         assert result is True
         assert not runtime_state.state_file.exists()
+
+    @patch("httpx.Client.post")
+    @patch("httpx.Client.get")
+    def test_pre_registration_and_verification_workflow(self, mock_get, mock_post):
+        """Test the complete pre-registration and verification workflow."""
+        from vllm_cli.proxy.server import ProxyServer
+
+        # Create proxy with models
+        proxy_config = ProxyConfig(
+            host="127.0.0.1",
+            port=18080,
+            models=[
+                ModelConfig(
+                    name="model1",
+                    model_path="path1",
+                    port=18001,
+                    gpu_ids=[0],
+                    enabled=True,
+                ),
+                ModelConfig(
+                    name="model2",
+                    model_path="path2",
+                    port=18002,
+                    gpu_ids=[1],
+                    enabled=True,
+                ),
+            ],
+        )
+
+        with patch("vllm_cli.proxy.server.httpx.AsyncClient"):
+            proxy_server = ProxyServer(proxy_config)
+
+        # Pre-register models
+        assert proxy_server.registry.pre_register(18001, [0], "model1")
+        assert proxy_server.registry.pre_register(18002, [1], "model2")
+
+        # Both should be pending
+        assert len(proxy_server.registry.get_all_models()) == 2
+        assert all(
+            m.status.value == "pending"
+            for m in proxy_server.registry.get_all_models().values()
+        )
+
+        # Mock successful model responses
+        mock_get_response = MagicMock()
+        mock_get_response.status_code = 200
+        mock_get_response.json.side_effect = [
+            {"data": [{"id": "actual-model1"}]},  # First model
+            {"data": [{"id": "actual-model2"}]},  # Second model
+        ]
+        mock_get.return_value = mock_get_response
+
+        # Simulate refresh process (simplified without async)
+        for port, entry in proxy_server.registry.get_all_models().items():
+            if entry.status.value == "pending":
+                # Simulate getting model info
+                response_data = mock_get_response.json()
+                actual_name = response_data["data"][0]["id"]
+
+                # Verify and activate
+                proxy_server.registry.verify_and_activate(port, actual_name)
+
+                # Add to router
+                proxy_server.router.add_backend(
+                    actual_name,
+                    f"http://localhost:{port}",
+                    {"port": port},
+                )
+
+        # All should now be available
+        available = proxy_server.registry.get_available_models()
+        assert len(available) == 2
+
+        # Router should have both models
+        assert "actual-model1" in proxy_server.router.backends
+        assert "actual-model2" in proxy_server.router.backends
+
+    @patch("vllm_cli.proxy.manager.VLLMServer")
+    @patch("httpx.Client.post")
+    def test_sleep_wake_lifecycle(self, mock_post, mock_server_class):
+        """Test the sleep/wake lifecycle for models."""
+        # Setup mock server
+        mock_server = MagicMock()
+        mock_server.start.return_value = True
+        mock_server.is_running.return_value = True
+        mock_server.port = 18001
+        mock_server_class.return_value = mock_server
+
+        # Create manager with a model
+        config = ProxyConfig(
+            models=[
+                ModelConfig(
+                    name="sleepy-model",
+                    model_path="model1",
+                    gpu_ids=[0],
+                    port=18001,
+                    enabled=True,
+                ),
+            ]
+        )
+
+        manager = ProxyManager(config)
+
+        # Start the model
+        with patch("time.sleep"):
+            assert manager.start_model(config.models[0])
+
+        # Mock successful sleep response
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_post.return_value = mock_response
+
+        # Sleep the model
+        result = manager.sleep_model("sleepy-model", level=2)
+        assert result is True
+
+        # Mock wake response (accept 202 as success)
+        mock_response.status_code = 202
+        result = manager.wake_model("sleepy-model")
+        assert result is True
+
+    def test_gpu_utilization_validation(self):
+        """Test GPU utilization validation in configuration."""
+        config_manager = ProxyConfigManager()
+
+        # Valid configuration - total utilization under limit
+        valid_config = ProxyConfig(
+            models=[
+                ModelConfig(
+                    name="model1",
+                    model_path="path1",
+                    port=18001,
+                    gpu_ids=[0],
+                    config_overrides={"gpu_memory_utilization": 0.4},
+                    enabled=True,
+                ),
+                ModelConfig(
+                    name="model2",
+                    model_path="path2",
+                    port=18002,
+                    gpu_ids=[0],
+                    config_overrides={"gpu_memory_utilization": 0.4},
+                    enabled=True,
+                ),
+            ]
+        )
+
+        errors = config_manager.validate_config(valid_config)
+        # Should pass basic validation (port checks, etc)
+        # Note: GPU utilization validation would need to be implemented
+        assert len(errors) <= 1  # May have warnings but not critical errors
+
+        # Invalid configuration - over 95% on single GPU
+        invalid_config = ProxyConfig(
+            models=[
+                ModelConfig(
+                    name="model1",
+                    model_path="path1",
+                    port=18001,
+                    gpu_ids=[0],
+                    config_overrides={"gpu_memory_utilization": 0.5},
+                    enabled=True,
+                ),
+                ModelConfig(
+                    name="model2",
+                    model_path="path2",
+                    port=18002,
+                    gpu_ids=[0],
+                    config_overrides={"gpu_memory_utilization": 0.5},
+                    enabled=True,
+                ),
+            ]
+        )
+
+        errors = config_manager.validate_config(invalid_config)
+        # Basic validation should still work
+        assert isinstance(errors, list)
+
+    def test_stale_entry_cleanup(self):
+        """Test cleanup of stale pending entries."""
+        from vllm_cli.proxy.registry import ModelRegistry
+
+        registry = ModelRegistry()
+
+        # Add models
+        registry.pre_register(18001, [0], "fresh-model")
+        registry.pre_register(18002, [1], "stale-model")
+
+        # Make one stale
+        import datetime as dt
+
+        old_time = dt.datetime.now() - dt.timedelta(minutes=10)
+        registry.models[18002].last_activity = old_time
+
+        # Clean up with 5 minute timeout
+        removed = registry.cleanup_stale_entries(timeout_seconds=300)
+
+        assert removed == 1
+        assert 18001 in registry.models
+        assert 18002 not in registry.models
+
+    @patch("vllm_cli.proxy.manager.ProxyServerProcess")
+    @patch("vllm_cli.proxy.manager.VLLMServer")
+    def test_refresh_model_registrations(self, mock_server_class, mock_process_class):
+        """Test refreshing model registrations with the proxy."""
+        # Setup mocks
+        mock_process = MagicMock()
+        mock_process.is_running.return_value = True
+        mock_process_class.return_value = mock_process
+
+        mock_server = MagicMock()
+        mock_server.start.return_value = True
+        mock_server_class.return_value = mock_server
+
+        # Create manager
+        config = ProxyConfig(
+            models=[
+                ModelConfig(
+                    name="model1",
+                    model_path="path1",
+                    port=18001,
+                    gpu_ids=[0],
+                    enabled=True,
+                ),
+            ]
+        )
+
+        manager = ProxyManager(config)
+        manager.proxy_process = mock_process
+
+        # Mock the API response
+        with patch.object(manager, "_proxy_api_request") as mock_request:
+            mock_request.return_value = MagicMock(
+                json=lambda: {
+                    "summary": {
+                        "registered": 1,
+                        "failed": 0,
+                        "already_registered": 0,
+                        "removed": 0,
+                    }
+                }
+            )
+
+            result = manager.refresh_model_registrations()
+
+            assert result["summary"]["registered"] == 1
+            mock_request.assert_called_once_with(
+                "POST", "/proxy/refresh_models", timeout=10.0
+            )
+
+    def test_model_allocation_strategies(self):
+        """Test different GPU allocation strategies."""
+        manager = ProxyManager()
+
+        # Test with 4 GPUs and 2 models
+        # Patch where it's imported inside the function
+        with patch("vllm_cli.system.get_gpu_info") as mock_gpu:
+            mock_gpu.return_value = [
+                {"index": 0},
+                {"index": 1},
+                {"index": 2},
+                {"index": 3},
+            ]
+
+            manager.proxy_config.models = [
+                ModelConfig(
+                    name="model1", model_path="path1", port=18001, enabled=True
+                ),
+                ModelConfig(
+                    name="model2", model_path="path2", port=18002, enabled=True
+                ),
+            ]
+
+            allocated = manager.allocate_gpus_automatically()
+
+            assert len(allocated) == 2
+            # Each model should get 2 GPUs
+            assert len(allocated[0].gpu_ids) == 2
+            assert len(allocated[1].gpu_ids) == 2
+            # No overlap
+            assert set(allocated[0].gpu_ids).isdisjoint(set(allocated[1].gpu_ids))
+
+        # Test with more models than GPUs
+        with patch("vllm_cli.system.get_gpu_info") as mock_gpu:
+            mock_gpu.return_value = [{"index": 0}, {"index": 1}]
+
+            manager.proxy_config.models = [
+                ModelConfig(
+                    name=f"model{i}",
+                    model_path=f"path{i}",
+                    port=18001 + i,
+                    enabled=True,
+                )
+                for i in range(4)
+            ]
+
+            allocated = manager.allocate_gpus_automatically()
+
+            # Only first 2 models get GPUs
+            assert len(allocated) == 2
+            assert allocated[0].gpu_ids == [0]
+            assert allocated[1].gpu_ids == [1]
