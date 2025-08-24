@@ -38,9 +38,25 @@ def main() -> NoReturn:
     try:
         # Check system requirements
         if not check_system_requirements():
-            console.print(
-                "[red]System requirements not met. Please check the log for details.[/red]"
-            )
+            # Check specifically what's missing to provide helpful error message
+            try:
+                pass
+            except ImportError:
+                console.print(
+                    "[red bold]System requirements not met:[/red bold]\n"
+                    "[red]✗ PyTorch is not installed[/red]\n\n"
+                    "To fix this, install vLLM (which includes PyTorch):\n"
+                    "  [cyan]Option 1:[/cyan] pip install vllm\n"
+                    "  [cyan]Option 2:[/cyan] pip install vllm-cli\\[vllm]  # Install both together\n\n"
+                    "[yellow]⚠ Warning:[/yellow] The default installation may not be compatible with your CUDA version.\n"
+                    "Visit [blue]https://docs.vllm.ai/en/latest/getting_started/installation[/blue] for installation\n"
+                    "instructions specific to your system.\n"
+                )
+            else:
+                # Generic message for other issues
+                console.print(
+                    "[red]System requirements not met. Please check the log for details.[/red]"
+                )
             sys.exit(1)
 
         # Parse command line arguments
