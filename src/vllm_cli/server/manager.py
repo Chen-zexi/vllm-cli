@@ -170,6 +170,11 @@ class VLLMServer:
                 env["HUGGING_FACE_HUB_TOKEN"] = hf_token  # Some tools use this variant
                 logger.info("HuggingFace token configured for server")
 
+            # Enable development mode for sleep endpoints if sleep mode is enabled
+            if self.config.get("enable_sleep_mode"):
+                env["VLLM_SERVER_DEV_MODE"] = "1"
+                logger.info("Sleep mode enabled with development endpoints")
+
             # Start the process with proper pipe configuration
             # Use start_new_session=True to create a new process group
             # This prevents the child process from receiving Ctrl+C signals
@@ -540,8 +545,9 @@ class VLLMServer:
         """
         Wait for the server to complete startup.
 
-        Monitors the server logs for startup completion indicators.
-        Will wait indefinitely until either startup completes or the process terminates.
+        Monitors the server logs for startup completion indicators and verifies
+        via HTTP endpoint. Will wait indefinitely until either startup completes
+        or the process terminates.
 
         Returns:
             True if server started successfully, False if process terminated
@@ -549,6 +555,9 @@ class VLLMServer:
         import time
 
         logger.info(f"Waiting for {self.model} server to complete startup...")
+
+        # Track if we've seen startup indicators in logs
+        log_indicates_ready = False
 
         while True:
             # Check if server is still running
@@ -561,14 +570,15 @@ class VLLMServer:
             # Get recent logs to check for startup completion
             recent_logs = self.get_recent_logs(50)
 
-            if recent_logs:
+            if recent_logs and not log_indicates_ready:
                 # Check for startup completion indicators
                 for log in recent_logs:
                     log_lower = log.lower()
                     # Look for the explicit "Application startup complete" message
                     if "application startup complete" in log_lower:
-                        logger.info(f"Server {self.model} startup complete")
-                        return True
+                        logger.debug(f"Server {self.model} startup detected in logs")
+                        log_indicates_ready = True
+                        break
 
                     # Also check for other ready indicators as fallback
                     if any(
@@ -580,10 +590,45 @@ class VLLMServer:
                             "api server started",
                         ]
                     ):
-                        logger.info(
-                            f"Server {self.model} startup complete (detected via ready indicator)"
+                        logger.debug(
+                            f"Server {self.model} startup detected via ready indicator"
                         )
-                        return True
+                        log_indicates_ready = True
+                        break
+
+            # If logs indicate ready, verify via HTTP
+            if log_indicates_ready:
+                # Try to verify server is actually ready via HTTP
+                port = self.config.get("port")
+                if port:
+                    try:
+                        import httpx
+
+                        with httpx.Client() as client:
+                            # Try /v1/models endpoint first (most reliable)
+                            response = client.get(
+                                f"http://localhost:{port}/v1/models", timeout=5.0
+                            )
+                            if response.status_code == 200:
+                                logger.info(
+                                    f"Server {self.model} startup complete "
+                                    "(verified via HTTP)"
+                                )
+                                return True
+                    except httpx.ConnectError:
+                        # Server not ready yet, continue waiting
+                        logger.debug(
+                            f"Server {self.model} not accepting connections yet"
+                        )
+                    except Exception as e:
+                        # Log but continue, might be network issue
+                        logger.debug(f"HTTP verification failed: {e}")
+                else:
+                    # No port configured, trust the logs
+                    logger.info(
+                        f"Server {self.model} startup complete (no port for verification)"
+                    )
+                    return True
 
             # Small sleep to avoid busy waiting
             time.sleep(0.5)

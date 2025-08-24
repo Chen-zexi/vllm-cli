@@ -7,12 +7,12 @@ from typing import List, Optional
 
 from rich.table import Table
 
-from ..proxy.config import ProxyConfigManager
-from ..proxy.models import ModelConfig, ProxyConfig
-from .common import console
-from .custom_config import select_gpus
-from .model_manager import select_model
-from .navigation import unified_prompt
+from ...proxy.config import ProxyConfigManager
+from ...proxy.models import ModelConfig, ProxyConfig
+from ..common import console
+from ..custom_config import select_gpus
+from ..model_manager import select_model
+from ..navigation import unified_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -118,8 +118,10 @@ def configure_proxy_interactively() -> Optional[ProxyConfig]:
         if action == "✓ Done configuring models":
             break
 
-        # Add a model
-        model_config = configure_model_interactively(len(models))
+        # Add a model - pass existing models for conflict checking
+        model_config = configure_model_for_proxy(
+            len(models), existing_models=models, is_running_proxy=False
+        )
         if model_config:
             models.append(model_config)
             console.print(f"\n[green]✓ Added model: {model_config.name}[/green]")
@@ -180,58 +182,97 @@ def _check_parallel_settings_conflict(
             )
 
 
-def configure_model_interactively(index: int) -> Optional[ModelConfig]:
+def configure_model_for_proxy(
+    index: int,
+    existing_models: Optional[List[ModelConfig]] = None,
+    is_running_proxy: bool = False,
+    proxy_manager=None,
+) -> Optional[ModelConfig]:
     """
-    Configure a single model interactively.
+    Unified function to configure a model for proxy serving.
+
+    This function provides a consistent UI experience for both:
+    - Initial proxy configuration (multiple models)
+    - Adding models to a running proxy
 
     Args:
         index: Index of this model (for default port calculation)
+        existing_models: List of already configured models (for conflict checking)
+        is_running_proxy: Whether configuring for a running proxy (affects prompts)
 
     Returns:
         ModelConfig instance or None if cancelled
     """
-    console.print(f"\n[cyan]Configure Model #{index + 1}[/cyan]")
+    if existing_models is None:
+        existing_models = []
 
-    # Select model directly
+    # Display appropriate header
+    if is_running_proxy:
+        console.print("\n[bold cyan]Add New Model[/bold cyan]\n")
+    else:
+        console.print(f"\n[cyan]Configure Model #{index + 1}[/cyan]")
+
+    # Select model using existing UI
     model_selection = select_model()
     if not model_selection:
         return None
 
-    # Check if a shortcut was selected
-    is_shortcut = (
-        isinstance(model_selection, dict) and model_selection.get("type") == "shortcut"
-    )
+    # Process model selection (handles shortcuts, ollama, lora, etc.)
+    model_path = None
+    model_name = None
     shortcut_profile = None
+    model_config_overrides = {}
+    is_shortcut = False
 
-    if is_shortcut:
-        # Extract shortcut information
-        model_path = model_selection["model"]
-        name = model_path
-        shortcut_profile = model_selection["profile"]
-        shortcut_name = model_selection["name"]
+    if isinstance(model_selection, dict):
+        if model_selection.get("type") == "shortcut":
+            # Shortcut selected
+            is_shortcut = True
+            model_path = model_selection["model"]
+            model_name = model_path
+            shortcut_profile = model_selection["profile"]
+            shortcut_name = model_selection["name"]
+            model_config_overrides = model_selection.get("config_overrides", {})
 
-        console.print(f"\n[bold cyan]Using Shortcut: {shortcut_name}[/bold cyan]")
-        console.print(f"[green]Model: {name}[/green]")
-        console.print(f"[blue]Profile: {shortcut_profile}[/blue]")
-    elif isinstance(model_selection, dict):
-        model_path = model_selection.get("model", model_selection.get("path"))
-        # For special model types (e.g., Ollama), use the name if available
-        if model_selection.get("type") == "ollama_model" and model_selection.get(
-            "name"
-        ):
-            name = model_selection.get("name")
+            console.print(f"\n[bold cyan]Using Shortcut: {shortcut_name}[/bold cyan]")
+            console.print(f"[green]Model: {model_name}[/green]")
+            console.print(f"[blue]Profile: {shortcut_profile}[/blue]")
+
+        elif model_selection.get("type") == "ollama_model":
+            # Ollama/GGUF model
+            model_path = model_selection.get("model", model_selection.get("path"))
+            model_name = model_selection.get("name", model_path)
+            if model_selection.get("served_model_name"):
+                model_config_overrides["served_model_name"] = model_selection[
+                    "served_model_name"
+                ]
+            model_config_overrides["quantization"] = "gguf"
+
+        elif "lora_modules" in model_selection:
+            # LoRA configuration
+            model_path = model_selection["model"]
+            lora_modules = model_selection["lora_modules"]
+            model_name = model_path.split("/")[-1] if "/" in model_path else model_path
+            model_config_overrides["enable_lora"] = True
+            model_config_overrides["lora_modules"] = lora_modules
+
         else:
-            # Use the model path as the name
-            name = model_path
+            # Other dict format
+            model_path = model_selection.get("model", model_selection.get("path"))
+            model_name = model_selection.get(
+                "name", model_path.split("/")[-1] if "/" in model_path else model_path
+            )
     else:
+        # Simple string model name/path
         model_path = model_selection
-        name = model_path
+        model_name = model_path.split("/")[-1] if "/" in model_path else model_path
 
-    # Display the model that will be used (only if not a shortcut, as shortcuts already display it)
+    # Display the model (only if not a shortcut, as shortcuts already display it)
     if not is_shortcut:
-        console.print(f"\n[green]Model: {name}[/green]")
+        console.print(f"\n[green]Model: {model_name}[/green]")
 
-    # Optional: Allow user to provide an alias (but keep the actual model as primary)
+    # Optional: Allow user to provide an alias
+    alias = None
     use_alias = (
         unified_prompt(
             "use_alias",
@@ -242,19 +283,34 @@ def configure_model_interactively(index: int) -> Optional[ModelConfig]:
         == "Yes, add an alias"
     )
 
-    alias = None
     if use_alias:
         alias_input = input("Enter alias (optional, press Enter to skip): ").strip()
         if alias_input:
             alias = alias_input
             console.print(
-                f"[dim]Note: Both '{name}' and '{alias}' will route to this model[/dim]"
+                f"[dim]Note: Both '{model_name}' and '{alias}' will route to this model[/dim]"
             )
 
     # GPU assignment
     console.print("\n[bold]GPU Assignment[/bold]")
 
-    # Show warning if using shortcut
+    # Get gpu_memory_utilization from profile if available
+    required_utilization = None
+    if is_shortcut and shortcut_profile:
+        # For shortcuts, we know the profile
+        from ...config import ConfigManager
+
+        config_manager = ConfigManager()
+        profile_data = config_manager.get_profile(shortcut_profile)
+        if profile_data and "config" in profile_data:
+            required_utilization = profile_data["config"].get(
+                "gpu_memory_utilization", 0.9
+            )
+            console.print(
+                f"[dim]Profile '{shortcut_profile}' uses {required_utilization*100:.0f}% GPU memory[/dim]"
+            )
+
+    # Show warning if using shortcut with parallel settings
     if is_shortcut:
         console.print(
             "[yellow]⚠ Warning:[/yellow] GPU selection may override profile settings"
@@ -266,7 +322,11 @@ def configure_model_interactively(index: int) -> Optional[ModelConfig]:
             "[dim]Your GPU selection will determine the actual parallelism used[/dim]\n"
         )
 
-    gpu_str = select_gpus()
+    gpu_str = select_gpus(
+        current_selection=None,
+        proxy_manager=proxy_manager,
+        required_utilization=required_utilization,
+    )
     gpu_ids = []
     if gpu_str:
         try:
@@ -278,29 +338,64 @@ def configure_model_interactively(index: int) -> Optional[ModelConfig]:
     else:
         console.print("[dim]No GPUs selected, will use automatic assignment[/dim]")
 
-    # Port
+    # Port selection with conflict checking
+    console.print("\n[bold]Port Selection[/bold]")
+
+    # Build port usage map from existing models with running status if proxy is running
+    used_ports = {}
+    for model in existing_models:
+        used_ports[model.port] = {"name": model.name, "model": model}
+
+    if used_ports:
+        console.print("\n[dim]Currently configured ports:[/dim]")
+        for port, info in sorted(used_ports.items()):
+            # For running proxy, check if model is actually running
+            if is_running_proxy:
+                # For running proxy, just show the port is in use
+                # The actual running status will be checked by the caller
+                console.print(f"  Port {port}: {info['name']}")
+            else:
+                console.print(f"  Port {port}: {info['name']}")
+
+    # Suggest next available port
     default_port = 8001 + index
+    # Find next available port if default is taken
+    while default_port in used_ports:
+        default_port += 1
+
     port_str = input(f"Port (default: {default_port}): ").strip() or str(default_port)
     try:
         port = int(port_str)
+        # Check for port conflicts
+        if port in used_ports:
+            if is_running_proxy:
+                # For running proxy, the caller will handle port reuse for stopped models
+                console.print(
+                    f"[yellow]Port {port} is configured for '{used_ports[port]['name']}'[/yellow]"
+                )
+                console.print(
+                    "[dim]Note: If this model is stopped, it will be replaced.[/dim]"
+                )
+            else:
+                # For initial config, don't allow duplicate ports
+                console.print(
+                    f"[red]Port {port} is already in use by '{used_ports[port]['name']}'[/red]"
+                )
+                console.print("[yellow]Please choose a different port[/yellow]")
+                return None
     except ValueError:
         console.print(f"[yellow]Invalid port, using default: {default_port}[/yellow]")
         port = default_port
 
-    # Profile selection (skip if using shortcut)
+    # Profile selection
+    profile = None
     if is_shortcut:
         # Use the profile from the shortcut
         profile = shortcut_profile
         console.print(f"\n[dim]Using profile from shortcut: {profile}[/dim]")
-
-        # Still check for conflicts with GPU selection
-        from ..config import ConfigManager
-
-        config_manager = ConfigManager()
-        _check_parallel_settings_conflict(profile, gpu_ids, config_manager)
     else:
         # Normal profile selection for non-shortcut models
-        from ..config import ConfigManager
+        from ...config import ConfigManager
 
         config_manager = ConfigManager()
         all_profiles = config_manager.get_all_profiles()
@@ -315,18 +410,38 @@ def configure_model_interactively(index: int) -> Optional[ModelConfig]:
 
             profile = None if selected_profile == "No profile" else selected_profile
 
-            # Check if profile has parallel settings that may conflict with single GPU
-            _check_parallel_settings_conflict(profile, gpu_ids, config_manager)
+            # If profile selected and no GPUs selected yet, update required_utilization
+            if profile and not gpu_ids:
+                profile_data = config_manager.get_profile(profile)
+                if profile_data and "config" in profile_data:
+                    profile_util = profile_data["config"].get(
+                        "gpu_memory_utilization", 0.9
+                    )
+                    console.print(
+                        f"\n[yellow]Note: Selected profile uses {profile_util*100:.0f}% GPU memory[/yellow]"
+                    )
+                    console.print(
+                        "[dim]You may want to reconsider GPU selection based on this requirement[/dim]"
+                    )
         else:
             profile = None
 
+    # Check for parallel settings conflicts
+    if profile:
+        from ...config import ConfigManager
+
+        config_manager = ConfigManager()
+        _check_parallel_settings_conflict(profile, gpu_ids, config_manager)
+
+    # Create model configuration
     config = ModelConfig(
-        name=name,
+        name=model_name,
         model_path=model_path,
         gpu_ids=gpu_ids,
         port=port,
         profile=profile,
         enabled=True,
+        config_overrides=model_config_overrides,
     )
 
     # Add alias to config_overrides if provided
@@ -334,6 +449,24 @@ def configure_model_interactively(index: int) -> Optional[ModelConfig]:
         config.config_overrides["aliases"] = [alias]
 
     return config
+
+
+def configure_model_interactively(index: int) -> Optional[ModelConfig]:
+    """
+    Configure a single model interactively.
+
+    This is a wrapper around configure_model_for_proxy for backward compatibility
+    and initial proxy configuration context.
+
+    Args:
+        index: Index of this model (for default port calculation)
+
+    Returns:
+        ModelConfig instance or None if cancelled
+    """
+    # During initial proxy configuration, we don't have existing models yet
+    # The configure_proxy_interactively function will accumulate them
+    return configure_model_for_proxy(index, existing_models=[], is_running_proxy=False)
 
 
 # Note: manage_proxy_configs has been moved to settings.py for consistency
@@ -394,7 +527,11 @@ def edit_proxy_config_interactive(current_config: ProxyConfig) -> Optional[Proxy
         elif action == "Edit proxy settings":
             edit_proxy_settings(current_config)
         elif action == "Add model":
-            model = configure_model_interactively(len(current_config.models))
+            model = configure_model_for_proxy(
+                len(current_config.models),
+                existing_models=current_config.models,
+                is_running_proxy=False,
+            )
             if model:
                 current_config.models.append(model)
                 console.print(f"[green]✓ Added model: {model.name}[/green]")

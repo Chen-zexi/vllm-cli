@@ -146,6 +146,26 @@ class ProxyManager:
             # Build vLLM server configuration
             vllm_config = self._build_vllm_config(model_config)
 
+            # Pre-register with proxy if it's running
+            if self.proxy_process and self.proxy_process.is_running():
+                pre_register_data = {
+                    "port": model_config.port,
+                    "gpu_ids": model_config.gpu_ids,
+                    "config_name": model_config.name,
+                }
+
+                response = self._proxy_api_request(
+                    "POST", "/proxy/pre_register", pre_register_data
+                )
+                if response:
+                    logger.info(
+                        f"Pre-registered model '{model_config.name}' with proxy"
+                    )
+                else:
+                    logger.warning(
+                        f"Failed to pre-register model '{model_config.name}' with proxy"
+                    )
+
             # Create and start vLLM server
             server = VLLMServer(vllm_config)
             if not server.start():
@@ -161,7 +181,7 @@ class ProxyManager:
             )
 
             # Note: Registration with proxy will happen after startup completes
-            # This is handled by wait_and_register_model() from start_all_models()
+            # Registration happens during wait_and_register_model()
 
             return True
 
@@ -171,7 +191,7 @@ class ProxyManager:
 
     def wait_and_register_model(self, model_config: ModelConfig) -> bool:
         """
-        Wait for a model to complete startup and register it with the proxy.
+        Wait for a model to complete startup and trigger proxy refresh.
 
         Args:
             model_config: Configuration for the model
@@ -193,31 +213,264 @@ class ProxyManager:
             del self.vllm_servers[model_config.name]
             return False
 
-        # Register with proxy if it's running
+        # Trigger proxy refresh to verify and activate the model
         if self.proxy_process and self.proxy_process.is_running():
-            # Prepare model configuration for proxy
-            model_data = {
-                "name": model_config.name,
-                "port": model_config.port,
-                "model_path": model_config.model_path,
-                "gpu_ids": model_config.gpu_ids,
-                **model_config.config_overrides,
+            # Call refresh to verify the pre-registered model
+            response = self._proxy_api_request(
+                "POST", "/proxy/refresh_models", timeout=10.0
+            )
+            if response:
+                try:
+                    result = response.json()
+                    summary = result.get("summary", {})
+                    if summary.get("registered", 0) > 0:
+                        logger.info(
+                            f"Model '{model_config.name}' successfully activated "
+                            f"on port {model_config.port}"
+                        )
+                        return True
+                    else:
+                        logger.warning(
+                            f"Model '{model_config.name}' started but "
+                            f"not activated in proxy"
+                        )
+                        return True  # Model is running, just not registered
+                except Exception as e:
+                    logger.error(f"Failed to parse refresh response: {e}")
+                    return True  # Model is running
+            else:
+                logger.warning(
+                    f"Failed to refresh proxy after starting "
+                    f"model '{model_config.name}'"
+                )
+                return True  # Model is running even if refresh failed
+
+        logger.info(f"Model '{model_config.name}' is ready")
+        return True
+
+    def refresh_model_registrations(self) -> Dict[str, Any]:
+        """
+        Refresh model registrations with the proxy.
+
+        Calls the proxy's refresh endpoint to verify all models in the registry.
+
+        Returns:
+            Dictionary with registration results
+        """
+        if not self.proxy_process or not self.proxy_process.is_running():
+            logger.warning("Proxy is not running, cannot refresh registrations")
+            return {"status": "error", "message": "Proxy server is not running"}
+
+        # Call the refresh endpoint
+        response = self._proxy_api_request(
+            "POST", "/proxy/refresh_models", timeout=10.0
+        )
+
+        if response:
+            try:
+                result = response.json()
+                summary = result.get("summary", {})
+                logger.info(
+                    f"Model registration refresh completed: "
+                    f"{summary.get('registered', 0)} newly registered, "
+                    f"{summary.get('failed', 0)} newly failed, "
+                    f"{summary.get('already_available', 0)} already available, "
+                    f"{summary.get('removed', 0)} removed"
+                )
+                return result
+            except Exception as e:
+                logger.error(f"Failed to parse refresh response: {e}")
+                return {"status": "error", "message": f"Failed to parse response: {e}"}
+        else:
+            logger.error("Failed to refresh model registrations")
+            return {
+                "status": "error",
+                "message": "Failed to connect to proxy refresh endpoint",
             }
 
-            # Register model with proxy via HTTP API
-            if self._proxy_api_request("POST", "/proxy/add_model", model_data):
-                logger.debug(f"Registered model '{model_config.name}' with proxy")
+    def get_proxy_registry_status(self) -> Optional[Dict[str, Any]]:
+        """
+        Get full model registry status from proxy.
 
-                # Also register any aliases
-                aliases = model_config.config_overrides.get("aliases", [])
-                for alias in aliases:
-                    alias_data = model_data.copy()
-                    alias_data["name"] = alias
-                    if self._proxy_api_request("POST", "/proxy/add_model", alias_data):
-                        logger.debug(f"Registered alias '{alias}' with proxy")
+        Returns:
+            Dictionary containing proxy status and all registered models,
+            or None if proxy is not running
+        """
+        if not self.proxy_process or not self.proxy_process.is_running():
+            logger.warning("Proxy is not running, cannot get registry status")
+            return None
 
-        logger.info(f"Model '{model_config.name}' is ready and registered")
-        return True
+        response = self._proxy_api_request("GET", "/proxy/registry")
+        if response:
+            try:
+                return response.json()
+            except Exception as e:
+                logger.error(f"Failed to parse proxy status response: {e}")
+                return None
+        return None
+
+    def sleep_model(self, model_name: str, level: int = 1) -> bool:
+        """
+        Put a model to sleep, freeing GPU memory but keeping the port.
+        Runs asynchronously and returns immediately.
+
+        Args:
+            model_name: Name of the model to sleep
+            level: Sleep level (1=offload weights, 2=discard weights)
+
+        Returns:
+            True if sleep request was initiated successfully
+        """
+        if model_name not in self.vllm_servers:
+            logger.warning(f"Model '{model_name}' is not running")
+            return False
+
+        server = self.vllm_servers[model_name]
+        port = server.port
+
+        try:
+            import threading
+
+            import httpx
+
+            def sleep_thread():
+                try:
+                    # Use 10 minute timeout for very slow operations
+                    client = httpx.Client(timeout=600.0)
+                    logger.info(
+                        f"Sending sleep request to model '{model_name}' "
+                        f"(level {level})..."
+                    )
+                    response = client.post(
+                        f"http://localhost:{port}/sleep?level={level}"
+                    )
+                    client.close()
+
+                    if response.status_code == 200:
+                        logger.info(
+                            f"Model '{model_name}' successfully put to sleep "
+                            f"(level {level})"
+                        )
+
+                        # Update proxy registry state
+                        if self.proxy_process and self.proxy_process.is_running():
+                            state_data = {
+                                "port": port,
+                                "state": "sleeping",
+                                "sleep_level": level,
+                            }
+                            self._proxy_api_request("POST", "/proxy/state", state_data)
+                    else:
+                        logger.error(
+                            f"Failed to sleep model '{model_name}': "
+                            f"HTTP {response.status_code}"
+                        )
+
+                except Exception as e:
+                    logger.error(f"Failed to sleep model '{model_name}': {e}")
+
+            # Start in background thread
+            thread = threading.Thread(target=sleep_thread, daemon=True)
+            thread.start()
+            logger.info(f"Sleep operation initiated for '{model_name}'")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to initiate sleep for '{model_name}': {e}")
+            return False
+
+    def wake_model(self, model_name: str) -> bool:
+        """
+        Wake up a sleeping model.
+        Runs asynchronously and returns immediately.
+
+        Args:
+            model_name: Name of the model to wake
+
+        Returns:
+            True if wake request was initiated successfully
+        """
+        if model_name not in self.vllm_servers:
+            logger.warning(f"Model '{model_name}' is not running")
+            return False
+
+        server = self.vllm_servers[model_name]
+        port = server.port
+
+        try:
+            import threading
+
+            import httpx
+
+            def wake_thread():
+                try:
+                    # Use 10 minute timeout for very slow operations
+                    client = httpx.Client(timeout=600.0)
+                    logger.info(f"Sending wake-up request to model '{model_name}'...")
+                    response = client.post(f"http://localhost:{port}/wake_up")
+                    client.close()
+
+                    # Accept both 200 (OK) and 202 (Accepted) as success
+                    if response.status_code in [200, 202]:
+                        logger.info(f"Model '{model_name}' successfully woken up")
+
+                        # Update proxy registry state
+                        if self.proxy_process and self.proxy_process.is_running():
+                            state_data = {
+                                "port": port,
+                                "state": "running",
+                                "sleep_level": 0,
+                            }
+                            self._proxy_api_request("POST", "/proxy/state", state_data)
+                    else:
+                        logger.error(
+                            f"Failed to wake model '{model_name}': "
+                            f"HTTP {response.status_code}"
+                        )
+
+                except Exception as e:
+                    logger.error(f"Failed to wake model '{model_name}': {e}")
+
+            # Start in background thread
+            thread = threading.Thread(target=wake_thread, daemon=True)
+            thread.start()
+            logger.info(f"Wake operation initiated for '{model_name}'")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to initiate wake for '{model_name}': {e}")
+            return False
+
+    def is_sleeping(self, model_name: str) -> bool:
+        """
+        Check if a model is sleeping.
+
+        Args:
+            model_name: Name of the model to check
+
+        Returns:
+            True if model is sleeping
+        """
+        if model_name not in self.vllm_servers:
+            return False
+
+        server = self.vllm_servers[model_name]
+        port = server.port
+
+        try:
+            import httpx
+
+            client = httpx.Client(timeout=5.0)
+            response = client.get(f"http://localhost:{port}/is_sleeping")
+            client.close()
+
+            if response.status_code == 200:
+                data = response.json()
+                return data.get("is_sleeping", False)
+        except Exception:
+            pass
+
+        return False
 
     def stop_model(self, model_name: str) -> bool:
         """
@@ -234,30 +487,21 @@ class ProxyManager:
             return False
 
         try:
-            # Stop the vLLM server
+            # Get the port before stopping
             server = self.vllm_servers[model_name]
+            port = server.port
+
+            # Stop the vLLM server
             server.stop()
 
             # Remove from tracking
             del self.vllm_servers[model_name]
 
-            # Remove from proxy if it's running
+            # Unregister from proxy if it's running
             if self.proxy_process and self.proxy_process.is_running():
-                # Remove main model from proxy
-                if self._proxy_api_request(
-                    "DELETE", f"/proxy/remove_model/{model_name}"
-                ):
-                    logger.debug(f"Removed model '{model_name}' from proxy")
-
-                # Also remove any aliases
-                model_config = self._get_model_config_by_name(model_name)
-                if model_config:
-                    aliases = model_config.config_overrides.get("aliases", [])
-                    for alias in aliases:
-                        if self._proxy_api_request(
-                            "DELETE", f"/proxy/remove_model/{alias}"
-                        ):
-                            logger.debug(f"Removed alias '{alias}' from proxy")
+                # Use the new registry endpoint with port
+                if self._proxy_api_request("DELETE", f"/proxy/models/{port}"):
+                    logger.debug(f"Unregistered model on port {port} from proxy")
 
             logger.info(f"Stopped vLLM server for '{model_name}'")
             return True
@@ -266,29 +510,23 @@ class ProxyManager:
             logger.error(f"Failed to stop model '{model_name}': {e}")
             return False
 
-    def start_all_models(self) -> int:
+    def unregister_model_from_proxy(self, port: int) -> bool:
         """
-        Start all models defined in the proxy configuration.
+        Unregister a model from the proxy registry by port.
+        This is useful for cleaning up stopped models.
+
+        Args:
+            port: Port number of the model to unregister
 
         Returns:
-            Number of models successfully started
+            True if successfully unregistered or proxy not running
         """
-        # First, start all model processes concurrently
-        started_configs = []
-        for model_config in self.proxy_config.models:
-            if model_config.enabled:
-                if self.start_model(model_config):
-                    started_configs.append(model_config)
-                    # Small delay to avoid resource conflicts but not wait for startup
-                    time.sleep(0.5)
-
-        # Now wait for all started models to complete startup and register them
-        successfully_started = 0
-        for model_config in started_configs:
-            if self.wait_and_register_model(model_config):
-                successfully_started += 1
-
-        return successfully_started
+        if self.proxy_process and self.proxy_process.is_running():
+            if self._proxy_api_request("DELETE", f"/proxy/models/{port}"):
+                logger.debug(f"Unregistered model on port {port} from proxy")
+                return True
+            return False
+        return True  # If proxy not running, consider it success
 
     def start_all_models_no_wait(self) -> int:
         """
@@ -327,9 +565,13 @@ class ProxyManager:
             if profile:
                 config = profile.get("config", {}).copy()
 
-        # Set model and port
+        # Set model, port, and host
         config["model"] = model_config.model_path
         config["port"] = model_config.port
+        config["host"] = self.proxy_config.host  # Use host from proxy configuration
+
+        # Enable sleep mode for better resource management
+        config["enable_sleep_mode"] = True
 
         # Handle GPU assignment
         if model_config.gpu_ids:

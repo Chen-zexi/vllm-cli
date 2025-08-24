@@ -5,34 +5,106 @@ Proxy monitoring UI module for vLLM CLI.
 Handles UI display for monitoring proxy servers and model engines.
 """
 import logging
+import re
 import threading
 import time
 from threading import Thread
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, Optional
 
+from rich import box
 from rich.align import Align
 from rich.console import Group
 from rich.layout import Layout
 from rich.live import Live
 from rich.padding import Padding
+from rich.panel import Panel
 from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 
-from ..config import ConfigManager
-from ..system import get_gpu_info
-from .common import console, create_panel
-from .gpu_utils import calculate_gpu_panel_size, create_gpu_status_panel
-from .navigation import unified_prompt
+from ...config import ConfigManager
+from ...system import get_gpu_info
+from ..common import console, create_panel
+from ..gpu_utils import calculate_gpu_panel_size, create_gpu_status_panel
+from ..navigation import unified_prompt
+from .components import create_model_registry_table
 
 if TYPE_CHECKING:
-    from ..proxy.manager import ProxyManager
-    from ..server import VLLMServer
+    from ...proxy.manager import ProxyManager
+    from ...server import VLLMServer
 
 logger = logging.getLogger(__name__)
 
 # Color palette for distinct model names
 MODEL_COLORS = ["cyan", "magenta", "green", "yellow", "blue", "red"]
+
+
+def parse_sleep_wake_logs(log_line: str) -> Optional[Dict]:
+    """
+    Parse sleep/wake completion logs for key information.
+
+    Args:
+        log_line: Single log line to parse
+
+    Returns:
+        Dict with parsed information or None if no pattern matched
+    """
+    # Check for sleep start
+    # Pattern: "POST /sleep?level=1"
+    if "POST /sleep" in log_line:
+        return {
+            'type': 'sleep_start',
+            'message': 'Sleep operation initiated'
+        }
+
+    # Check for wake start
+    # Pattern: "wake up the engine with tags: None"
+    if "wake up the engine" in log_line:
+        return {
+            'type': 'wake_start',
+            'message': 'Wake operation initiated'
+        }
+
+    # Check for sleep completion
+    # Pattern: "It took 17.893898 seconds to fall asleep."
+    sleep_match = re.search(r"It took ([\d.]+) seconds to fall asleep", log_line)
+    if sleep_match:
+        return {
+            'type': 'sleep_complete',
+            'time': float(sleep_match.group(1)),
+            'message': f"Sleep completed in {sleep_match.group(1)} seconds"
+        }
+
+    # Check for wake completion
+    # Pattern: "It took 24.368552 seconds to wake up tags {'kv_cache', 'weights'}."
+    wake_match = re.search(r"It took ([\d.]+) seconds to wake up", log_line)
+    if wake_match:
+        tags = None
+        tags_match = re.search(r"tags ({[^}]+})", log_line)
+        if tags_match:
+            tags = tags_match.group(1)
+        return {
+            'type': 'wake_complete',
+            'time': float(wake_match.group(1)),
+            'tags': tags,
+            'message': f"Wake completed in {wake_match.group(1)} seconds"
+        }
+
+    # Check for memory info during sleep
+    # Pattern: "Sleep mode freed 90.40 GiB memory, 3.30 GiB memory is still in use."
+    memory_match = re.search(
+        r"Sleep mode freed ([\d.]+) GiB memory, ([\d.]+) GiB memory is still in use",
+        log_line
+    )
+    if memory_match:
+        return {
+            'type': 'memory_info',
+            'freed': float(memory_match.group(1)),
+            'remaining': float(memory_match.group(2)),
+            'message': f"Freed {memory_match.group(1)} GiB, {memory_match.group(2)} GiB still in use"
+        }
+
+    return None
 
 
 def create_models_log_panel(
@@ -397,6 +469,108 @@ def monitor_startup_progress(proxy_manager: "ProxyManager") -> bool:
         return True
 
 
+def refresh_model_registry(proxy_manager: "ProxyManager"):
+    """
+    Refresh the model registry by scanning and registering all configured models.
+
+    Args:
+        proxy_manager: The ProxyManager instance
+    """
+    console.print("\n[bold cyan]Refreshing Model Registry[/bold cyan]")
+    console.print("[dim]Scanning for models to register...[/dim]\n")
+
+    # Call the refresh method
+    with console.status("[cyan]Refreshing model registrations...[/cyan]"):
+        result = proxy_manager.refresh_model_registrations()
+
+    if result.get("status") == "error":
+        console.print(f"[red]✗ Error: {result.get('message', 'Unknown error')}[/red]")
+    else:
+        # Display results
+        summary = result.get("summary", {})
+        details = result.get("details", {})
+
+        # Create a summary table for what changed
+        summary_table = Table(box=box.ROUNDED)
+        summary_table.add_column("Status", style="cyan")
+        summary_table.add_column("Count", style="white")
+        summary_table.add_column("Models", style="dim")
+
+        # Only add rows if there were changes
+        has_changes = False
+        if summary.get("registered", 0) > 0:
+            has_changes = True
+            registered = details.get("newly_registered", [])
+            summary_table.add_row(
+                "✓ Newly Registered",
+                str(summary.get("registered", 0)),
+                ", ".join(registered) if registered else "-",
+            )
+
+        if summary.get("failed", 0) > 0:
+            has_changes = True
+            failed = details.get("newly_failed", [])
+            summary_table.add_row(
+                "✗ Newly Failed",
+                str(summary.get("failed", 0)),
+                ", ".join(failed) if failed else "-",
+            )
+
+        if summary.get("removed", 0) > 0:
+            has_changes = True
+            removed = details.get("removed", [])
+            summary_table.add_row(
+                "[×] Removed (stopped)",
+                str(summary.get("removed", 0)),
+                ", ".join(removed) if removed else "-",
+            )
+
+        # Show the summary table only if there were changes
+        if has_changes:
+            summary_panel = Panel(
+                summary_table,
+                title="[bold cyan]Registration Changes[/bold cyan]",
+                border_style="cyan",
+                padding=(1, 2),
+            )
+            console.print(summary_panel)
+
+        # Show status for already available models
+        if summary.get("already_available", 0) > 0:
+            available_list = details.get("already_available", [])
+            if available_list:
+                console.print(
+                    f"\n[green]✓ {len(available_list)} model(s) verified as available:[/green] "
+                    f"{', '.join(available_list)}"
+                )
+
+        # Get full registry status to show current state of all models
+        registry_status = proxy_manager.get_proxy_registry_status()
+        if registry_status:
+            # Use shared component to create table
+            status_table = create_model_registry_table(
+                registry_status, proxy_manager, include_title=True
+            )
+
+            # Display if we have models
+            if registry_status.get("models") or (
+                proxy_manager and proxy_manager.proxy_config.models
+            ):
+                console.print()  # Add spacing
+                console.print(status_table)
+
+        # Show detailed failure reasons if any
+        if details.get("failed"):
+            console.print("\n[yellow]Failed Registration Details:[/yellow]")
+            for failure in details["failed"]:
+                console.print(
+                    f"  • {failure.get('name', 'unknown')}: "
+                    f"[dim]{failure.get('reason', 'Unknown reason')}[/dim]"
+                )
+
+    input("\nPress Enter to continue...")
+
+
 def monitor_model_logs_menu(proxy_manager: "ProxyManager") -> str:
     """
     Submenu for selecting model monitoring mode.
@@ -457,6 +631,7 @@ def monitor_proxy(proxy_manager: "ProxyManager") -> str:
             "Overview - Monitor all models",
             "Individual - Monitor specific model logs",
             "Proxy Server Logs - View proxy server logs",
+            "Refresh Model Registry - Scan and register models",
             "Status - Show current status",
             "Back to proxy menu",
         ]
@@ -475,6 +650,9 @@ def monitor_proxy(proxy_manager: "ProxyManager") -> str:
             result = monitor_individual_model(proxy_manager)
         elif choice == "Proxy Server Logs - View proxy server logs":
             result = monitor_proxy_logs(proxy_manager)
+        elif choice == "Refresh Model Registry - Scan and register models":
+            refresh_model_registry(proxy_manager)
+            continue  # Loop back to menu
         elif choice == "Status - Show current status":
             show_proxy_status(proxy_manager)
             input("\nPress Enter to continue...")
@@ -653,6 +831,32 @@ def monitor_proxy_overview(proxy_manager: "ProxyManager") -> str:
         return "back"
 
 
+def monitor_individual_model_by_name(
+    proxy_manager: "ProxyManager", model_name: str
+) -> str:
+    """
+    Monitor logs of a specific model by name.
+
+    Args:
+        proxy_manager: The ProxyManager instance
+        model_name: Name of the model to monitor
+
+    Returns:
+        Navigation command string
+    """
+    if model_name not in proxy_manager.vllm_servers:
+        console.print(f"[red]Model '{model_name}' not found or not running[/red]")
+        input("\nPress Enter to continue...")
+        return "back"
+
+    server = proxy_manager.vllm_servers[model_name]
+    console.print(f"\n[bold cyan]Monitoring: {model_name}[/bold cyan]")
+    console.print(f"[dim]Port: {server.port} | Press Ctrl+C to stop monitoring[/dim]\n")
+
+    # Monitor the model logs
+    return monitor_model_engine(server, model_name, proxy_manager)
+
+
 def monitor_individual_model(proxy_manager: "ProxyManager") -> str:
     """
     Monitor logs of a specific model engine.
@@ -752,6 +956,16 @@ def monitor_model_engine(
 
         layout["footer"].update(Align.center(Text(footer_text, style="dim cyan")))
 
+        # Track operation state for completion detection
+        operation_state = {
+            'type': None,  # 'sleeping', 'waking', or None
+            'memory_freed': None,
+            'memory_remaining': None,
+            'completion_time': None,
+            'completed': False,
+            'notification_shown_until': None  # Show notification for 5 seconds
+        }
+
         with Live(layout, console=console, refresh_per_second=monitor_refresh_rate):
             while True:
                 # Update status
@@ -800,19 +1014,110 @@ def monitor_model_engine(
                 if show_gpu:
                     fixed_height += gpu_panel_size
 
-                # Available lines for logs
-                available_lines = max(20, current_height - fixed_height - 2)
+                # Account for logs panel overhead: Rule(1) + Padding(1) + margin(1)
+                logs_panel_overhead = 3
+
+                # Available lines for logs with proper accounting
+                available_lines = max(
+                    10, current_height - fixed_height - logs_panel_overhead
+                )
                 recent_logs = server.get_recent_logs(available_lines)
 
+                # Check for sleep/wake operations in logs
                 if recent_logs:
-                    log_text = Text("\n".join(recent_logs), style="dim white")
-                else:
-                    log_text = Text("Waiting for logs...", style="dim yellow")
+                    for log_line in recent_logs:
+                        parsed = parse_sleep_wake_logs(log_line)
+                        if parsed:
+                            if parsed['type'] == 'sleep_start':
+                                # Sleep operation started
+                                operation_state['type'] = 'sleeping'
+                                operation_state['completed'] = False
+                                operation_state['memory_freed'] = None
+                                operation_state['memory_remaining'] = None
+                            elif parsed['type'] == 'wake_start':
+                                # Wake operation started
+                                operation_state['type'] = 'waking'
+                                operation_state['completed'] = False
+                            elif parsed['type'] == 'memory_info':
+                                # Store memory info for sleep operation
+                                operation_state['memory_freed'] = parsed['freed']
+                                operation_state['memory_remaining'] = parsed['remaining']
+                            elif parsed['type'] == 'sleep_complete':
+                                # Sleep operation completed
+                                operation_state['type'] = 'sleeping'
+                                operation_state['completion_time'] = parsed['time']
+                                operation_state['completed'] = True
+                                operation_state['notification_shown_until'] = time.time() + 5  # Show for 5 seconds
+                            elif parsed['type'] == 'wake_complete':
+                                # Wake operation completed
+                                operation_state['type'] = 'waking'
+                                operation_state['completion_time'] = parsed['time']
+                                operation_state['completed'] = True
+                                operation_state['notification_shown_until'] = time.time() + 5
 
-                logs_content = Group(
-                    Rule(f"Engine Logs - {model_name}", style="yellow"),
-                    Padding(log_text, (1, 2)),
-                )
+                # Build logs display with notification if needed
+                if operation_state.get('type') and not operation_state.get('completed'):
+                    # Operation in progress
+                    if operation_state['type'] == 'sleeping':
+                        progress_text = "[yellow]⏳ Sleep operation in progress...[/yellow]"
+                    else:  # waking
+                        progress_text = "[yellow]⏳ Wake operation in progress...[/yellow]"
+
+                    # Show progress indicator with logs
+                    log_text = Text("\n".join(recent_logs) if recent_logs else "Waiting for logs...", style="dim white")
+                    logs_content = Group(
+                        Panel(progress_text, border_style="yellow", box=box.ROUNDED),
+                        Rule(f"Engine Logs - {model_name}", style="yellow"),
+                        Padding(log_text, (0, 2))
+                    )
+                elif operation_state.get('completed') and operation_state.get('notification_shown_until'):
+                    if time.time() < operation_state['notification_shown_until']:
+                        # Show completion notification
+                        notification_lines = []
+
+                        if operation_state['type'] == 'sleeping':
+                            notification_lines.append("[bold green]✓ SLEEP COMPLETED[/bold green]")
+                            notification_lines.append(f"[cyan]Time taken: {operation_state['completion_time']:.2f} seconds[/cyan]")
+                            if operation_state.get('memory_freed'):
+                                notification_lines.append(f"[yellow]Memory freed: {operation_state['memory_freed']:.2f} GiB[/yellow]")
+                                notification_lines.append(f"[dim]Memory in use: {operation_state['memory_remaining']:.2f} GiB[/dim]")
+                        elif operation_state['type'] == 'waking':
+                            notification_lines.append("[bold green]✓ WAKE COMPLETED[/bold green]")
+                            notification_lines.append(f"[cyan]Time taken: {operation_state['completion_time']:.2f} seconds[/cyan]")
+                            notification_lines.append("[green]Model is now fully operational[/green]")
+
+                        # Create notification panel
+                        notification_panel = Panel(
+                            "\n".join(notification_lines),
+                            title="[bold yellow]Operation Complete[/bold yellow]",
+                            border_style="green",
+                            box=box.DOUBLE
+                        )
+
+                        # Show logs below notification
+                        log_text = Text("\n".join(recent_logs[-10:]), style="dim white")  # Show last 10 lines
+
+                        logs_content = Group(
+                            notification_panel,
+                            Rule(f"Engine Logs - {model_name}", style="yellow"),
+                            Padding(log_text, (0, 2))
+                        )
+                    else:
+                        # Notification period expired - exit the monitoring loop
+                        # to show completion summary and return to menu
+                        break
+                else:
+                    # Normal log display
+                    if recent_logs:
+                        log_text = Text("\n".join(recent_logs), style="dim white")
+                    else:
+                        log_text = Text("Waiting for logs...", style="dim yellow")
+
+                    logs_content = Group(
+                        Rule(f"Engine Logs - {model_name}", style="yellow"),
+                        Padding(log_text, (0, 2))
+                    )
+
                 layout["logs"].update(logs_content)
 
                 # Check if server is still running
@@ -991,6 +1296,41 @@ def monitor_proxy_logs(proxy_manager: "ProxyManager") -> str:
             Align.center(Text("Press Ctrl+C to stop monitoring", style="dim cyan"))
         )
 
+        # Smart registry refresh for pending models
+        registry_refresh_interval = 5.0  # Start with 5 seconds
+        max_refresh_interval = 30.0  # Max 30 seconds between refreshes
+        last_registry_update = time.time()
+        pending_model_count = 0
+        refresh_attempts = 0
+        max_refresh_attempts = 10  # Stop trying after 10 attempts
+
+        # Initial registry fetch
+        try:
+            initial_registry_status = proxy_manager.get_proxy_registry_status()
+            if initial_registry_status:
+                # Count pending models
+                models = initial_registry_status.get("models", [])
+                pending_model_count = sum(
+                    1 for m in models if m.get("registration_status") == "pending"
+                )
+                cached_registry_table = create_model_registry_table(
+                    initial_registry_status, proxy_manager, include_title=False
+                )
+
+                if pending_model_count > 0:
+                    logger.debug(
+                        f"Found {pending_model_count} pending models, will refresh registry"
+                    )
+            else:
+                cached_registry_table = Table(box=box.ROUNDED)
+                cached_registry_table.add_column("Status", style="yellow")
+                cached_registry_table.add_row("Registry status unavailable")
+        except Exception as e:
+            logger.warning(f"Error fetching initial registry: {e}")
+            cached_registry_table = Table(box=box.ROUNDED)
+            cached_registry_table.add_column("Error", style="red")
+            cached_registry_table.add_row(f"Error: {str(e)[:50]}")
+
         with Live(layout, console=console, refresh_per_second=monitor_refresh_rate):
             while True:
                 # Proxy server information
@@ -1064,51 +1404,72 @@ def monitor_proxy_logs(proxy_manager: "ProxyManager") -> str:
                     )
                 )
 
-                # Backend servers table
-                backends_table = Table()
-                backends_table.add_column("Model", style="cyan")
-                backends_table.add_column("URL", style="magenta")
-                backends_table.add_column("Status", style="green")
-                backends_table.add_column("Requests", style="yellow")
+                # Smart refresh: Only update registry if there are pending models
+                current_time = time.time()
+                should_refresh = False
 
-                # Display backend information from vllm_servers
-                if proxy_manager.vllm_servers:
+                if pending_model_count > 0 and refresh_attempts < max_refresh_attempts:
+                    # Check if enough time has passed for next refresh
+                    if (
+                        current_time - last_registry_update
+                    ) >= registry_refresh_interval:
+                        should_refresh = True
+                if should_refresh:
                     try:
-                        for model_name, server in proxy_manager.vllm_servers.items():
-                            # Build URL from server info
-                            url = f"http://localhost:{server.port}"
-
-                            # Server is already from the loop
-                            status = (
-                                "[green]Running[/green]"
-                                if server and server.is_running()
-                                else "[red]Stopped[/red]"
+                        # Fetch updated registry
+                        updated_registry = proxy_manager.get_proxy_registry_status()
+                        if updated_registry:
+                            # Count pending models in update
+                            models = updated_registry.get("models", [])
+                            new_pending_count = sum(
+                                1
+                                for m in models
+                                if m.get("registration_status") == "pending"
+                            )
+                            # Update the table
+                            cached_registry_table = create_model_registry_table(
+                                updated_registry, proxy_manager, include_title=False
                             )
 
-                            # Request count available via /proxy/status
-                            request_count = "N/A"
+                            # Check if we made progress
+                            if new_pending_count < pending_model_count:
+                                # Progress made, reset interval
+                                registry_refresh_interval = 5.0
+                                refresh_attempts = 0
+                                logger.debug(
+                                    f"Registry refresh: {pending_model_count} -> {new_pending_count} pending"
+                                )
+                            else:
+                                # No progress, increase interval (exponential backoff)
+                                registry_refresh_interval = min(
+                                    registry_refresh_interval * 1.5,
+                                    max_refresh_interval,
+                                )
+                                refresh_attempts += 1
 
-                            backends_table.add_row(
-                                (
-                                    model_name[:30] + "..."
-                                    if len(model_name) > 30
-                                    else model_name
-                                ),
-                                url,
-                                status,
-                                str(request_count),
-                            )
+                            pending_model_count = new_pending_count
+                            last_registry_update = current_time
+
+                            # Stop refreshing if all models are registered
+                            if pending_model_count == 0:
+                                logger.debug(
+                                    "All models registered, stopping registry refresh"
+                                )
+
                     except Exception as e:
-                        logger.warning(f"Error displaying backends: {e}")
-                        backends_table.add_row(
-                            "Error loading backends", str(e)[:30], "", ""
+                        logger.warning(f"Error refreshing registry: {e}")
+                        # On error, increase interval
+                        registry_refresh_interval = min(
+                            registry_refresh_interval * 2, max_refresh_interval
                         )
-                else:
-                    backends_table.add_row("No backends registered", "", "", "")
+                        refresh_attempts += 1
 
+                # Use the cached (possibly updated) registry table
                 layout["backends"].update(
                     create_panel(
-                        backends_table, title="Registered Backends", border_style="blue"
+                        cached_registry_table,
+                        title="Current Model Registry",
+                        border_style="blue",
                     )
                 )
 

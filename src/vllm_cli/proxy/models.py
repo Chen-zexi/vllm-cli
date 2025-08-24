@@ -42,6 +42,7 @@ class ModelStatus(BaseModel):
     port: int
     gpu_ids: List[int]
     status: str  # "running", "starting", "stopped", "error"
+    registration_status: Optional[str] = None  # "pending", "available", "error"
     uptime: Optional[float] = None
     error_message: Optional[str] = None
     request_count: int = 0

@@ -447,9 +447,9 @@ def handle_status() -> bool:
 
             # Determine status
             if status["running"]:
-                status_str = "🟢 Running"
+                status_str = "[●] Running"
             else:
-                status_str = "🔴 Stopped"
+                status_str = "[×] Stopped"
 
             # Format uptime
             uptime_str = status.get("uptime_str", "Unknown")
@@ -773,7 +773,7 @@ def handle_proxy(args: argparse.Namespace) -> bool:
             proxy_config = config_manager.load_config(config_path)
         elif hasattr(args, "interactive") and args.interactive:
             # Interactive configuration
-            from ..ui.proxy_control import configure_proxy_interactively
+            from ..ui.proxy.control import configure_proxy_interactively
 
             proxy_config = configure_proxy_interactively()
             if not proxy_config:
@@ -805,10 +805,19 @@ def handle_proxy(args: argparse.Namespace) -> bool:
             allocated = proxy_manager.allocate_gpus_automatically()
             proxy_config.models = allocated
 
-        # Start all models
-        console.print("\n[cyan]Starting model servers...[/cyan]")
-        started = proxy_manager.start_all_models()
-        console.print(f"Started {started}/{len(proxy_config.models)} models")
+        # Start all models with monitoring
+        console.print("\n[cyan]Launching model servers...[/cyan]")
+        launched = proxy_manager.start_all_models_no_wait()
+
+        if launched > 0:
+            # Monitor startup progress with live logs
+            from ..proxy import monitor_startup_progress
+
+            all_started = monitor_startup_progress(proxy_manager)
+
+            if not all_started:
+                console.print("[yellow]Warning: Some models failed to start.[/yellow]")
+                console.print("[dim]Continuing with available models...[/dim]")
 
         # Start proxy
         if proxy_manager.start_proxy():
@@ -857,7 +866,7 @@ def handle_proxy(args: argparse.Namespace) -> bool:
                         )
 
                         if choice == "Monitor proxy (all options)":
-                            from ..proxy.monitor import monitor_proxy
+                            from ..ui.proxy.monitor import monitor_proxy
 
                             result = monitor_proxy(proxy_manager)
                             if result == "back":
@@ -1074,7 +1083,7 @@ def handle_proxy(args: argparse.Namespace) -> bool:
 
         elif hasattr(args, "edit") and args.edit:
             # Edit configuration interactively
-            from ..ui.proxy_control import edit_proxy_config
+            from ..ui.proxy.control import edit_proxy_config
 
             edit_proxy_config()
 

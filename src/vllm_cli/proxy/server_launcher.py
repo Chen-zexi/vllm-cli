@@ -8,7 +8,6 @@ parsing command-line arguments and starting the FastAPI/uvicorn server.
 import argparse
 import json
 import logging
-import socket
 import sys
 
 import uvicorn
@@ -21,6 +20,106 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+
+def verify_pending_models_limited(proxy_server):
+    """
+    Limited verification of pending models - stops when done or after max time.
+
+    This function runs for a limited time and stops when:
+    - All pending models are verified (activated or failed)
+    - Maximum time limit is reached (5 minutes)
+    - No progress is made after multiple attempts
+    """
+    import time
+
+    import httpx
+
+    max_total_time = 300  # 5 minutes maximum
+    check_interval = 5  # Start with 5 seconds
+    max_interval = 30  # Max interval between checks
+    start_time = time.time()
+    no_progress_count = 0
+    max_no_progress = 5  # Stop after 5 checks with no progress
+
+    logger.info("Starting limited background verification of pending models")
+
+    while (time.time() - start_time) < max_total_time:
+        # First check if we have any pending models
+        try:
+            # Query the registry status to check pending count
+            with httpx.Client() as client:
+                # Get registry status first
+                registry_response = client.get(
+                    f"http://localhost:{proxy_server.config.port}/proxy/registry",
+                    timeout=5,
+                )
+
+                if registry_response.status_code == 200:
+                    registry_data = registry_response.json()
+                    models = registry_data.get("models", [])
+
+                    # Count pending models
+                    pending_count = sum(
+                        1
+                        for model in models
+                        if model.get("registration_status") == "pending"
+                    )
+
+                    if pending_count == 0:
+                        logger.info(
+                            "No pending models remaining, stopping verification"
+                        )
+                        return
+
+                    logger.debug(f"{pending_count} models still pending verification")
+        except Exception as e:
+            logger.debug(f"Failed to check registry status: {e}")
+
+        # Wait before calling refresh
+        time.sleep(check_interval)
+
+        try:
+            # Call the proxy's refresh endpoint to verify pending models
+            with httpx.Client() as client:
+                response = client.post(
+                    f"http://localhost:{proxy_server.config.port}/proxy/refresh_models",
+                    timeout=10,
+                )
+
+                if response.status_code == 200:
+                    result = response.json()
+                    summary = result.get("summary", {})
+
+                    if summary.get("registered", 0) > 0:
+                        logger.info(
+                            f"Background verification: "
+                            f"{summary['registered']} models activated"
+                        )
+                        # Reset interval and no-progress counter on success
+                        check_interval = 5
+                        no_progress_count = 0
+                    else:
+                        # No new registrations, increase interval
+                        check_interval = min(check_interval * 1.5, max_interval)
+                        no_progress_count += 1
+
+                        if no_progress_count >= max_no_progress:
+                            logger.info(
+                                "No progress after multiple attempts, "
+                                "stopping verification"
+                            )
+                            return
+
+        except Exception as e:
+            logger.debug(f"Background verification error: {e}")
+            # Increase interval on error
+            check_interval = min(check_interval * 1.5, max_interval)
+            no_progress_count += 1
+
+    logger.info(
+        f"Background verification stopped after {max_total_time} seconds (timeout)"
+    )
 
 
 def parse_args():
@@ -68,75 +167,69 @@ def main():
         )
         proxy_server = ProxyServer(proxy_config)
 
-        # Register already-running models with the router
-        # This handles the case where models were started before the proxy
+        # Pre-register all configured models with PENDING status
+        # This is the ONLY time we use the config - at startup
+        models_to_verify = []
+
         for model in proxy_config.models:
             if model.enabled:
-                # First check if port is in use
-                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                sock.settimeout(1)  # 1 second timeout for connection attempt
-                port_result = sock.connect_ex(("localhost", model.port))
-                sock.close()
+                # Pre-register the model in the registry with PENDING status
+                gpu_ids = model.gpu_ids if hasattr(model, "gpu_ids") else []
 
-                if port_result == 0:  # Port is in use
-                    # Try to verify the server is actually ready with a health check
-                    backend_url = f"http://localhost:{model.port}"
-                    server_ready = False
+                # Pre-register in the runtime registry
+                success = proxy_server.registry.pre_register(
+                    port=model.port,
+                    gpu_ids=gpu_ids,
+                    config_name=model.name,
+                )
 
-                    try:
-                        import httpx
-
-                        # Try health endpoint first
-                        with httpx.Client() as client:
-                            try:
-                                response = client.get(
-                                    f"{backend_url}/health", timeout=2
-                                )
-                                server_ready = response.status_code == 200
-                            except Exception:
-                                # If health endpoint fails, try models endpoint
-                                try:
-                                    response = client.get(
-                                        f"{backend_url}/v1/models", timeout=2
-                                    )
-                                    server_ready = response.status_code == 200
-                                except Exception:
-                                    # Server is running but not yet ready
-                                    logger.debug(
-                                        f"Model '{model.name}' on port "
-                                        f"{model.port} not ready yet"
-                                    )
-                    except ImportError:
-                        # httpx not available, assume server is ready if port is open
-                        server_ready = True
-                        logger.debug(
-                            "httpx not available for health check, "
-                            "assuming server is ready"
-                        )
-
-                    if server_ready:
-                        proxy_server.router.add_backend(
-                            model.name,
-                            backend_url,
-                            (
-                                model.model_dump()
-                                if hasattr(model, "model_dump")
-                                else model.dict()
-                            ),
-                        )
-                        logger.info(
-                            f"Registered running model '{model.name}' at {backend_url}"
-                        )
-                    else:
-                        logger.info(
-                            f"Model '{model.name}' on port {model.port} is "
-                            "starting up, will register when ready"
-                        )
-                else:
-                    logger.debug(
-                        f"Model '{model.name}' not running on port {model.port}, "
-                        "will register when started"
+                if success:
+                    logger.info(
+                        f"Pre-registered model '{model.name}' on port {model.port} "
+                        "with PENDING status"
                     )
+                    models_to_verify.append(model)
+                else:
+                    logger.warning(
+                        f"Failed to pre-register model '{model.name}' "
+                        f"on port {model.port}"
+                    )
+
+        # If we have models to verify, start a background thread
+        if models_to_verify:
+            # Immediately try to verify once
+            try:
+                import httpx
+
+                with httpx.Client() as client:
+                    response = client.post(
+                        f"http://localhost:{proxy_config.port}/proxy/refresh_models",
+                        timeout=5,
+                    )
+                    if response.status_code == 200:
+                        result = response.json()
+                        summary = result.get("summary", {})
+                        if summary.get("registered", 0) > 0:
+                            logger.info(
+                                f"Initial verification: "
+                                f"{summary['registered']} models activated"
+                            )
+            except Exception as e:
+                logger.debug(f"Initial verification attempt failed: {e}")
+
+            # Start background thread for continuous verification
+            import threading
+
+            verify_thread = threading.Thread(
+                target=verify_pending_models_limited,
+                args=(proxy_server,),
+                daemon=True,
+            )
+            verify_thread.start()
+            logger.info(
+                f"Started limited background thread to verify {len(models_to_verify)} "
+                "pre-registered models (max 5 minutes)"
+            )
 
         # Configure uvicorn logging
         log_config = uvicorn.config.LOGGING_CONFIG.copy()

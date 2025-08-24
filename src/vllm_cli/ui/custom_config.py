@@ -695,12 +695,18 @@ def configure_argument(
     return config
 
 
-def select_gpus(current_selection: Optional[str] = None) -> Optional[str]:
+def select_gpus(
+    current_selection: Optional[str] = None,
+    proxy_manager=None,
+    required_utilization: float = None,
+) -> Optional[str]:
     """
-    Interactive GPU selection with checkbox UI.
+    Interactive GPU selection with checkbox UI and memory usage display.
 
     Args:
         current_selection: Current GPU selection as comma-separated string
+        proxy_manager: ProxyManager instance (unused, kept for compatibility)
+        required_utilization: Unused, kept for compatibility
 
     Returns:
         Comma-separated GPU indices (e.g., "0,1,2") or None
@@ -712,6 +718,16 @@ def select_gpus(current_selection: Optional[str] = None) -> Optional[str]:
         console.print("[yellow]No GPUs detected[/yellow]")
         return None
 
+    # Get user's preferred progress bar style
+    config_manager = ConfigManager()
+    ui_prefs = config_manager.get_ui_preferences()
+    ui_prefs.get("progress_bar_style", "blocks")
+
+    # Get current GPU memory usage
+    from .gpu_utils import get_gpu_memory_dict
+
+    gpu_memory = get_gpu_memory_dict()
+
     # Parse current selection
     selected_indices = []
     if current_selection:
@@ -722,19 +738,42 @@ def select_gpus(current_selection: Optional[str] = None) -> Optional[str]:
         except (ValueError, AttributeError):
             selected_indices = []
 
-    # Build choices for checkbox
+    # Build choices for checkbox with memory usage info
     gpu_choices = []
     for gpu_data in gpu_info:
         idx = gpu_data["index"]
         name = gpu_data["name"]
         memory_gb = gpu_data["memory_total"] / (1024**3)  # Convert bytes to GB
 
+        # Build base label
         choice_label = f"GPU {idx}: {name} ({memory_gb:.1f}GB)"
+
+        # Add memory usage info if available
+        if idx in gpu_memory:
+            mem_info = gpu_memory[idx]
+            usage_percent = mem_info["usage_percent"]
+
+            # Show memory usage percentage
+            choice_label += f" - {usage_percent:.0f}% used"
+
+            # Add warning if memory is already in use
+            if usage_percent > 10:
+                choice_label += " ⚠️"
+
         gpu_choices.append((choice_label, idx, idx in selected_indices))
 
     # Show current selection if exists
     if current_selection:
         console.print(f"\n[dim]Current selection: {current_selection}[/dim]")
+
+    # Show warning about GPU memory
+    has_gpu_usage = any(
+        gpu_memory.get(i, {}).get("usage_percent", 0) > 10 for i in range(len(gpu_info))
+    )
+    if has_gpu_usage:
+        console.print(
+            "\n[yellow]⚠️  Warning: Some GPUs have memory in use. Loading models may cause OOM errors.[/yellow]"
+        )
 
     console.print(
         "\n[dim]Select GPUs to use (space to select/deselect, enter to confirm)[/dim]"

@@ -380,7 +380,6 @@ class ConfigManager:
             {
                 "progress_bar_style": "blocks",  # Default style
                 "show_gpu_in_monitor": True,
-                "auto_refresh_interval": 1.0,
                 "log_lines_startup": 50,  # Number of log lines to show during startup
                 "log_lines_monitor": 50,  # Number of log lines to show in server monitor
                 "startup_refresh_rate": 4.0,  # Hz for startup log refresh

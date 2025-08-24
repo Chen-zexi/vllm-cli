@@ -271,14 +271,6 @@ class ProxyConfigManager:
                 errors.append(f"Port {model.port} is used by multiple services")
             used_ports.add(model.port)
 
-        # Check for GPU conflicts
-        used_gpus = set()
-        for model in config.models:
-            for gpu_id in model.gpu_ids:
-                if gpu_id in used_gpus:
-                    errors.append(f"GPU {gpu_id} is assigned to multiple models")
-                used_gpus.add(gpu_id)
-
         # Check model names are unique
         model_names = [m.name for m in config.models]
         if len(model_names) != len(set(model_names)):

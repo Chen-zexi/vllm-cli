@@ -296,6 +296,77 @@ def create_gpu_summary_line(
     return " | ".join(summaries)
 
 
+def get_gpu_memory_dict() -> Dict[int, Dict[str, float]]:
+    """
+    Get current GPU memory usage as a simple dictionary.
+
+    This provides a simple data structure for GPU memory information,
+    useful for programmatic access rather than display formatting.
+
+    Returns:
+        Dictionary mapping GPU ID to memory info with:
+        - total_gb: Total memory in GB
+        - used_gb: Used memory in GB
+        - free_gb: Free memory in GB
+        - usage_percent: Percentage of memory used
+    """
+    gpu_memory = {}
+    try:
+        gpu_infos = get_gpu_info()
+
+        for gpu in gpu_infos:
+            gpu_id = gpu["index"]
+            total_bytes = gpu["memory_total"]
+            used_bytes = gpu["memory_used"]
+            free_bytes = gpu["memory_free"]
+
+            gpu_memory[gpu_id] = {
+                "total_gb": total_bytes / (1024**3),
+                "used_gb": used_bytes / (1024**3),
+                "free_gb": free_bytes / (1024**3),
+                "usage_percent": (
+                    (used_bytes / total_bytes * 100) if total_bytes > 0 else 0
+                ),
+            }
+    except Exception as e:
+        logger.warning(f"Failed to get GPU memory dict: {e}")
+
+    return gpu_memory
+
+
+def check_gpu_memory_warnings(
+    gpu_ids: List[int], threshold_percent: float = 10.0
+) -> List[str]:
+    """
+    Check if GPUs have significant memory usage and return warnings.
+
+    This function helps prevent out-of-memory errors by warning when
+    GPUs already have significant memory allocated.
+
+    Args:
+        gpu_ids: List of GPU IDs to check
+        threshold_percent: Memory usage percentage threshold for warnings (default: 10%)
+
+    Returns:
+        List of warning messages (empty if no concerns)
+    """
+    warnings = []
+    gpu_memory = get_gpu_memory_dict()
+
+    for gpu_id in gpu_ids:
+        if gpu_id in gpu_memory:
+            mem_info = gpu_memory[gpu_id]
+            # Warn if GPU exceeds threshold
+            if mem_info["usage_percent"] > threshold_percent:
+                warnings.append(
+                    f"⚠️  GPU {gpu_id} already has {mem_info['usage_percent']:.0f}% "
+                    f"memory in use ({mem_info['used_gb']:.1f}GB). "
+                    f"Loading additional models may cause OOM errors."
+                )
+
+    return warnings
+
+
 def create_compact_gpu_panel(progress_style: Optional[str] = None) -> Panel:
     """
     Create a compact GPU panel for space-constrained displays.
