@@ -134,8 +134,7 @@ def add_new_model_to_proxy(proxy_manager, proxy_config) -> None:
         registration_thread.start()
 
         # Immediately show monitoring - user sees logs right away!
-        console.print(f"\n[cyan]Monitoring {new_model.name} startup...[/cyan]")
-        console.print("[dim]Press Ctrl+C to stop monitoring[/dim]\n")
+        console.print(f"\n[cyan]Monitoring {new_model.name} startup...[/cyan]\n")
 
         # Monitor shows real-time logs during startup
         result = monitor_individual_model_by_name(proxy_manager, new_model.name)
@@ -300,7 +299,6 @@ def manage_existing_models(proxy_manager, proxy_config) -> None:
             console.print(
                 "[yellow]Sleep command sent. Monitoring progress...[/yellow]\n"
             )
-            console.print("[dim]Press Ctrl+C to stop monitoring[/dim]\n")
 
             # Monitor the model logs - handles completion detection and notifications
             return monitor_individual_model_by_name(proxy_manager, model.name)
@@ -316,7 +314,6 @@ def manage_existing_models(proxy_manager, proxy_config) -> None:
             console.print(
                 "[yellow]Wake command sent. Monitoring progress...[/yellow]\n"
             )
-            console.print("[dim]Press Ctrl+C to stop monitoring[/dim]\n")
 
             # Monitor the model logs - handles completion detection and notifications
             return monitor_individual_model_by_name(proxy_manager, model.name)
@@ -348,8 +345,7 @@ def manage_existing_models(proxy_manager, proxy_config) -> None:
             registration_thread.start()
 
             # Immediate monitoring
-            console.print(f"\n[cyan]Monitoring {model.name} startup...[/cyan]")
-            console.print("[dim]Press Ctrl+C to stop monitoring[/dim]\n")
+            console.print(f"\n[cyan]Monitoring {model.name} startup...[/cyan]\n")
 
             return monitor_individual_model_by_name(proxy_manager, model.name)
         else:
@@ -390,8 +386,7 @@ def manage_existing_models(proxy_manager, proxy_config) -> None:
             registration_thread.start()
 
             # Immediate monitoring
-            console.print(f"\n[cyan]Monitoring {model.name} restart...[/cyan]")
-            console.print("[dim]Press Ctrl+C to stop monitoring[/dim]\n")
+            console.print(f"\n[cyan]Monitoring {model.name} restart...[/cyan]\n")
 
             return monitor_individual_model_by_name(proxy_manager, model.name)
         else:

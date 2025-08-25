@@ -34,8 +34,7 @@ def monitor_server(server: VLLMServer) -> str:
     """
     # Clear console for clean display
     console.clear()
-    console.print("[bold cyan]Monitoring Server[/bold cyan]")
-    console.print("[dim]Press Ctrl+C to stop monitoring[/dim]\n")
+    console.print("[bold cyan]Monitoring Server[/bold cyan]\n")
 
     # Get UI preferences
     config_manager = ConfigManager()

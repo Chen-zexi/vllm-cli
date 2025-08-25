@@ -39,15 +39,7 @@ def get_attention_backend_usability() -> Dict[str, Any]:
     info = {}
 
     try:
-        import sys
-
         import torch
-
-        # Add vLLM path if needed
-        vllm_path = "/home/chen/projects/vllm"
-        if vllm_path not in sys.path:
-            sys.path.insert(0, vllm_path)
-
         from vllm.platforms import current_platform
 
         # Check if CUDA is available
@@ -90,16 +82,33 @@ def get_attention_backend_usability() -> Dict[str, Any]:
         try:
             import flash_attn
 
-            # Test actual functionality
-            # test_q = torch.randn(1, 1, 8, 64, device="cuda", dtype=torch.float16)  # noqa: E501
-            backends["flash_attn"] = {
-                "name": "Flash Attention (External)",
-                "available": True,
-                "usable": True,
-                "version": getattr(flash_attn, "__version__", "installed"),
-                "reason": "External package, fully functional",
-                "priority": 2,
-            }
+            # Test actual functionality with error handling
+            try:
+                # Uncomment to test if needed, but be careful with CUDA errors
+                # test_q = torch.randn(1, 1, 8, 64, device="cuda", dtype=torch.float16)
+                # flash_attn.flash_attn_func(test_q, test_q, test_q)
+                backends["flash_attn"] = {
+                    "name": "Flash Attention (External)",
+                    "available": True,
+                    "usable": True,
+                    "version": getattr(flash_attn, "__version__", "installed"),
+                    "reason": "External package, fully functional",
+                    "priority": 2,
+                }
+            except (RuntimeError, torch.cuda.CudaError) as cuda_err:
+                logger.debug(f"Flash Attention CUDA test failed: {cuda_err}")
+                # Clear CUDA error state
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                    torch.cuda.synchronize()
+                backends["flash_attn"] = {
+                    "name": "Flash Attention (External)",
+                    "available": True,
+                    "usable": False,
+                    "version": getattr(flash_attn, "__version__", "installed"),
+                    "reason": f"Not compatible with SM {compute_cap}",
+                    "priority": 2,
+                }
         except ImportError:
             backends["flash_attn"] = {
                 "name": "Flash Attention (External)",
@@ -110,6 +119,7 @@ def get_attention_backend_usability() -> Dict[str, Any]:
                 "priority": 2,
             }
         except Exception as e:
+            logger.debug(f"Flash Attention error: {e}")
             backends["flash_attn"] = {
                 "name": "Flash Attention (External)",
                 "available": True,
@@ -152,17 +162,61 @@ def get_attention_backend_usability() -> Dict[str, Any]:
             import xformers
             import xformers.ops
 
-            # Test memory efficient attention
-            test = torch.randn(1, 8, 64, device="cuda", dtype=torch.float16)
-            xformers.ops.memory_efficient_attention(test, test, test)
-            backends["xformers"] = {
-                "name": "xFormers",
-                "available": True,
-                "usable": True,
-                "version": xformers.__version__,
-                "reason": "Memory efficient, good fallback",
-                "priority": 4,
-            }
+            # Skip actual test for Blackwell GPUs (SM 12.0) due to known
+            # compatibility issues
+            if float(compute_cap) >= 12.0:
+                logger.debug(
+                    f"Skipping xFormers GPU test on Blackwell (SM {compute_cap})"
+                )
+                backends["xformers"] = {
+                    "name": "xFormers",
+                    "available": True,
+                    "usable": False,
+                    "version": xformers.__version__,
+                    "reason": f"Not yet compatible with Blackwell (SM {compute_cap})",
+                    "priority": 4,
+                }
+            else:
+                # Test memory efficient attention with better error handling
+                try:
+                    test = torch.randn(1, 8, 64, device="cuda", dtype=torch.float16)
+                    xformers.ops.memory_efficient_attention(test, test, test)
+                    backends["xformers"] = {
+                        "name": "xFormers",
+                        "available": True,
+                        "usable": True,
+                        "version": xformers.__version__,
+                        "reason": "Memory efficient, good fallback",
+                        "priority": 4,
+                    }
+                except (RuntimeError, torch.cuda.CudaError) as cuda_err:
+                    # Handle CUDA errors gracefully
+                    logger.debug(f"xFormers CUDA test failed: {cuda_err}")
+                    # Clear CUDA error state
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                        torch.cuda.synchronize()
+
+                    # Mark as available but not usable on this GPU
+                    backends["xformers"] = {
+                        "name": "xFormers",
+                        "available": True,
+                        "usable": False,
+                        "version": xformers.__version__,
+                        "reason": f"Not compatible with SM {compute_cap}",
+                        "priority": 4,
+                    }
+                except Exception as e:
+                    # Other unexpected errors
+                    logger.debug(f"xFormers test error: {e}")
+                    backends["xformers"] = {
+                        "name": "xFormers",
+                        "available": True,
+                        "usable": False,
+                        "version": xformers.__version__,
+                        "reason": f"Test failed: {str(e)[:30]}",
+                        "priority": 4,
+                    }
         except ImportError:
             backends["xformers"] = {
                 "name": "xFormers",
@@ -170,15 +224,6 @@ def get_attention_backend_usability() -> Dict[str, Any]:
                 "usable": False,
                 "version": None,
                 "reason": "Not installed (pip install xformers)",
-                "priority": 4,
-            }
-        except Exception as e:
-            backends["xformers"] = {
-                "name": "xFormers",
-                "available": True,
-                "usable": False,
-                "version": "error",
-                "reason": f"Runtime error: {str(e)[:50]}",
                 "priority": 4,
             }
 
@@ -285,7 +330,18 @@ def get_attention_backend_usability() -> Dict[str, Any]:
                 str(backend_cls).split(".")[-1].replace("'", "").replace(">", "")
             )
             info["auto_selected"] = backend_name
+        except (RuntimeError, torch.cuda.CudaError) as cuda_err:
+            logger.debug(f"CUDA error getting auto-selected backend: {cuda_err}")
+            # Clear CUDA error state
+            if torch.cuda.is_available():
+                try:
+                    torch.cuda.empty_cache()
+                    torch.cuda.synchronize()
+                except Exception:
+                    pass  # Ignore errors during cleanup
+            info["auto_selected"] = "Error: CUDA compatibility issue"
         except Exception as e:
+            logger.debug(f"Error getting auto-selected backend: {e}")
             info["auto_selected"] = f"Error: {str(e)[:50]}"
 
         # Check current environment setting
@@ -293,10 +349,24 @@ def get_attention_backend_usability() -> Dict[str, Any]:
         info["backends"] = backends
         info["compute_capability"] = compute_cap
 
+        # Final CUDA cleanup to ensure no lingering errors
+        if torch.cuda.is_available():
+            try:
+                torch.cuda.synchronize()
+            except Exception:
+                pass  # Ignore any cleanup errors
+
         return info
 
     except Exception as e:
         logger.debug(f"Error checking attention backend usability: {e}")
+        # Try to clean up CUDA state even on general failure
+        try:
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+        except Exception:
+            pass
         return {"error": str(e), "backends": {}}
 
 
@@ -422,15 +492,7 @@ def get_vllm_flash_attention_info() -> Dict[str, Any]:
     """
     try:
         # Try to import vLLM's flash attention
-        import sys
-
         import torch
-
-        # Add vLLM path if needed
-        vllm_path = "/home/chen/projects/vllm"
-        if vllm_path not in sys.path:
-            sys.path.insert(0, vllm_path)
-
         from vllm.vllm_flash_attn import __version__ as fa_version
         from vllm.vllm_flash_attn.flash_attn_interface import (
             FA2_AVAILABLE,
@@ -648,15 +710,7 @@ def get_vllm_platform_info() -> Dict[str, Any]:
         Dictionary with platform details
     """
     try:
-        import sys
-
         import torch
-
-        # Add vLLM path if needed
-        vllm_path = "/home/chen/projects/vllm"
-        if vllm_path not in sys.path:
-            sys.path.insert(0, vllm_path)
-
         from vllm.platforms import current_platform
 
         info = {
@@ -744,15 +798,7 @@ def get_vllm_capabilities() -> Dict[str, Any]:
         Dictionary with capability details
     """
     try:
-        import sys
-
         import torch
-
-        # Add vLLM path if needed
-        vllm_path = "/home/chen/projects/vllm"
-        if vllm_path not in sys.path:
-            sys.path.insert(0, vllm_path)
-
         from vllm.platforms import current_platform
 
         info = {
@@ -841,12 +887,6 @@ def get_vllm_environment_status() -> Dict[str, Any]:
     """
     try:
         import os
-        import sys
-
-        # Add vLLM path if needed
-        vllm_path = "/home/chen/projects/vllm"
-        if vllm_path not in sys.path:
-            sys.path.insert(0, vllm_path)
 
         import vllm.envs as envs
 
@@ -1110,13 +1150,6 @@ def get_vllm_kernel_status() -> Dict[str, Any]:
         Dictionary with kernel availability information
     """
     try:
-        import sys
-
-        # Add vLLM path if needed
-        vllm_path = "/home/chen/projects/vllm"
-        if vllm_path not in sys.path:
-            sys.path.insert(0, vllm_path)
-
         info = {"available": True, "kernels": {}}
 
         # Try to import custom ops

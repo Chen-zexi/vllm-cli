@@ -850,7 +850,6 @@ def monitor_proxy_overview(proxy_manager: "ProxyManager") -> str:
         pass
 
     console.print("\n[yellow]Monitoring stopped.[/yellow]")
-    console.print("[dim]Press Ctrl+C to stop proxy servers[/dim]")
 
     try:
         input("\nPress Enter to return to monitoring menu...")
@@ -889,10 +888,6 @@ def monitor_individual_model_by_name(
         return "back"
 
     server = proxy_manager.vllm_servers[model_name]
-    console.print(f"\n[bold cyan]Monitoring: {model_name}[/bold cyan]")
-    console.print(f"[dim]Port: {server.port} | Press Ctrl+C to stop monitoring[/dim]\n")
-
-    # Monitor the model logs
     return monitor_model_engine(server, model_name, proxy_manager)
 
 
@@ -943,8 +938,6 @@ def monitor_model_engine(
 
     Similar to single-model monitoring but within proxy context.
     """
-    console.print(f"[bold cyan]Monitoring Model: {model_name}[/bold cyan]")
-    console.print("[dim]Press Ctrl+C for menu options[/dim]\n")
 
     # Get UI preferences
     config_manager = ConfigManager()
@@ -1349,7 +1342,6 @@ def monitor_model_engine(
         # Manual exit via Ctrl+C
         console.print("\n[yellow]Monitoring stopped.[/yellow]")
         console.print(f"[green]✓ Model '{model_name}' continues running[/green]")
-        console.print("[dim]Press Ctrl+C to stop proxy servers[/dim]")
 
         try:
             input("\nPress Enter to return to monitoring menu...")
@@ -1452,8 +1444,7 @@ def monitor_proxy_logs(proxy_manager: "ProxyManager") -> str:
     Returns:
         Navigation command string
     """
-    console.print("[bold cyan]Proxy Server Logs & Statistics[/bold cyan]")
-    console.print("[dim]Press Ctrl+C to stop monitoring[/dim]\n")
+    console.print("[bold cyan]Proxy Server Logs & Statistics[/bold cyan]\n")
 
     # Get UI preferences
     config_manager = ConfigManager()
@@ -1738,7 +1729,6 @@ def monitor_proxy_logs(proxy_manager: "ProxyManager") -> str:
         pass
 
     console.print("\n[yellow]Monitoring stopped.[/yellow]")
-    console.print("[dim]Press Ctrl+C to stop proxy servers[/dim]")
 
     try:
         input("\nPress Enter to return to monitoring menu...")
