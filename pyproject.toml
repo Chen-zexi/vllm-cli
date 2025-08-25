@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vllm-cli"
-version = "0.2.5rc2"
+version = "0.2.5"
 authors = [
     { name="Zexi Chen", email="zzxxi.chen@gmail.com" },
 ]
@@ -35,7 +35,7 @@ dependencies = [
     "requests>=2.28.0",
     "fastapi>=0.100.0",
     "uvicorn>=0.23.0",
-    "httpx>=0.24.0",
+    "httpx>=0.24.0,<1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -48,7 +48,7 @@ test = [
     "pytest-mock>=3.10.0",
     "pytest-asyncio>=0.21.0",
     "requests>=2.28.0",
-    "httpx>=0.24.0",
+    "httpx>=0.24.0,<1.0.0",
     "fastapi>=0.100.0",
     "uvicorn>=0.23.0",
 ]
