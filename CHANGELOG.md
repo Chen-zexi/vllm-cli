@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.2.5] - 2025-08-25
+
+### Added
+- **Multi-Model Proxy Server (Experimental)**: Enabling multiple LLMs through a single unified API endpoint
+  - Single OpenAI-compatible endpoint for all models
+  - Request routing based on model name
+  - Save and reuse proxy configurations
+- **Dynamic Model Management**: Add or remove models at runtime without restarting the proxy
+  - Live model registration and unregistration
+  - Pre-registration with verification lifecycle
+  - Graceful handling of model failures without affecting other models
+  - Model state tracking (pending, running, sleeping, stopped)
+- **Model Sleep/Wake for GPU Memory Management**: Efficient GPU resource distribution
+  - Sleep Level 1: CPU offload for faster wake-up
+  - Sleep Level 2: Full memory discard for maximum savings
+  - Real-time memory usage tracking and reporting
+  - Models maintain their ports while sleeping
+- **Test Coverage**: Added comprehensive tests for multi-model proxy and model registry
+
+### Changed
+- Improved error handling with detailed logs when PyTorch is not installed
+- Better server cleanup and process management
+
+### Fixed
+- UI navigation improvements and minor display fixes
+
 ## [v0.2.4] - 2025-08-20
 
 ### Added

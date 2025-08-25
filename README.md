@@ -25,6 +25,22 @@ A command-line interface tool for serving Large Language Models using vLLM. Prov
 
 **Quick Links:** [📖 Docs](#documentation) | [🚀 Quick Start](#quick-start) | [📸 Screenshots](docs/screenshots.md) | [📘 Usage Guide](docs/usage-guide.md) | [❓ Troubleshooting](docs/troubleshooting.md) | [🗺️ Roadmap](docs/roadmap.md)
 
+## What's New in v0.2.5
+
+### Multi-Model Proxy Server (Experimental)
+
+The Multi-Model Proxy is a new experimental feature that enables serving multiple LLMs through a single unified API endpoint. This feature is currently under active development and available for testing.
+
+**What It Does:**
+- **Single Endpoint** - All your models accessible through one API
+- **Live Management** - Add or remove models without stopping the service
+- **Dynamic GPU Management** - Efficient GPU resource distribution through vLLM's sleep/wake functionality
+- **Interactive Setup** - User-friendly wizard guides you through configuration
+
+**Note:** This is an experimental feature under active development. Your feedback helps us improve! Please share your experience through [GitHub Issues](https://github.com/Chen-zexi/vllm-cli/issues).
+
+For complete documentation, see the [🌐 Multi-Model Proxy Guide](docs/multi-model-proxy.md).
+
 ## What's New in v0.2.4
 
 ### 🚀 Hardware-Optimized Profiles for GPT-OSS Models
@@ -53,28 +69,6 @@ vllm-cli serve --shortcut my-gpt-server
 
 See [CHANGELOG.md](CHANGELOG.md) for detailed release notes.
 
-## 🚧 Pre-Release Features (v0.2.5)
-
-### Multi-Model Proxy Server (Experimental)
-
-The Multi-Model Proxy is a new experimental feature that enables serving multiple LLMs through a single unified API endpoint. This feature is currently under active development and available for testing.
-
-**What It Does:**
-- **Single Endpoint** - All your models accessible through one API
-- **Live Management** - Add or remove models without stopping the service
-- **Dynamic GPU Management** - Efficient GPU resource distribution through vLLM's sleep/wake functionality
-- **Interactive Setup** - User-friendly wizard guides you through configuration
-
-**You can install the pre-release version with:**
-
-```bash
-pip install --pre --upgrade vllm-cli
-```
-
-**Note:** This is an experimental feature under active development. Your feedback helps us improve! Please share your experience through [GitHub Issues](https://github.com/Chen-zexi/vllm-cli/issues).
-
-For complete documentation, see the [🌐 Multi-Model Proxy Guide](docs/multi-model-proxy.md).
-
 ## Quick Start
 
 ### Important: vLLM Installation Notes
@@ -89,8 +83,8 @@ vLLM-CLI will not install vLLM or Pytorch by default.
 # Install vLLM -- Skip this step if you have vllm installed in your environment
 uv venv --python 3.12 --seed
 source .venv/bin/activate
-uv pip install vllm-cli[vllm] --torch-backend=auto
-# Or specify a backend: uv pip install vllm-cli[vllm] --torch-backend=cu129
+uv pip install vllm --torch-backend=auto
+# Or specify a backend: uv pip install vllm --torch-backend=cu128
 
 # Install vLLM CLI
 uv pip install --upgrade vllm-cli

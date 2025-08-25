@@ -82,11 +82,9 @@ def get_attention_backend_usability() -> Dict[str, Any]:
         try:
             import flash_attn
 
-            # Test actual functionality with error handling
             try:
-                # Uncomment to test if needed, but be careful with CUDA errors
-                # test_q = torch.randn(1, 1, 8, 64, device="cuda", dtype=torch.float16)
-                # flash_attn.flash_attn_func(test_q, test_q, test_q)
+                test_q = torch.randn(1, 1, 8, 64, device="cuda", dtype=torch.float16)
+                flash_attn.flash_attn_func(test_q, test_q, test_q)
                 backends["flash_attn"] = {
                     "name": "Flash Attention (External)",
                     "available": True,
