@@ -19,6 +19,12 @@ class ModelConfig(BaseModel):
         default_factory=dict, description="Additional vLLM configuration"
     )
     enabled: bool = Field(True, description="Whether model is enabled")
+    loading_priority: Optional[int] = Field(
+        None,
+        description="Loading priority (lower numbers load first). "
+        "Models with same priority load in parallel. "
+        "Models with None priority load after all prioritized models.",
+    )
 
 
 class ProxyConfig(BaseModel):

@@ -107,6 +107,7 @@ def create_models_log_panel(
     total_lines: int = None,
     show_status: bool = True,
     available_height: int = None,
+    filter_models: set = None,
 ) -> list:
     """
     Create consistent model logs panel for monitoring.
@@ -117,6 +118,7 @@ def create_models_log_panel(
         total_lines: Total number of log lines to display across all models
         show_status: Whether to show status indicators
         available_height: Available terminal height for dynamic calculation
+        filter_models: Optional set of model names to display (filters active_models)
 
     Returns:
         List of Rich Text objects for display
@@ -125,6 +127,11 @@ def create_models_log_panel(
 
     # Get active models
     active_models = [m for m in proxy_manager.proxy_config.models if m.enabled]
+
+    # Filter to specific models if requested
+    if filter_models is not None:
+        active_models = [m for m in active_models if m.name in filter_models]
+
     num_models = len(active_models)
 
     # Calculate lines_per_model dynamically based on available space
@@ -469,6 +476,236 @@ def monitor_startup_progress(proxy_manager: "ProxyManager") -> bool:
     else:
         console.print(
             f"\n[green]✓ All {success_count} model(s) started successfully[/green]"
+        )
+        return True
+
+
+def monitor_priority_group(
+    proxy_manager: "ProxyManager",
+    models_in_group: List,
+    priority_label: str,
+    group_index: int,
+    total_groups: int,
+) -> bool:
+    """
+    Monitor the startup progress of models in a single priority group.
+
+    Reuses the monitoring infrastructure from monitor_startup_progress but
+    filters to show only models in the current priority group.
+
+    Args:
+        proxy_manager: The ProxyManager instance
+        models_in_group: List of ModelConfig instances in this priority group
+        priority_label: Human-readable label (e.g., "Priority 1")
+        group_index: Current group number (1-indexed)
+        total_groups: Total number of priority groups
+
+    Returns:
+        True if all models in group started successfully, False otherwise
+    """
+    console.print(
+        f"\n[bold cyan]{priority_label} (Group {group_index}/{total_groups})[/bold cyan]"
+    )
+    console.print(
+        f"[dim]Starting {len(models_in_group)} model(s) - "
+        f"showing real-time logs...[/dim]\n"
+    )
+
+    # Get UI preferences
+    config_manager = ConfigManager()
+    ui_prefs = config_manager.get_ui_preferences()
+    monitor_refresh_rate = ui_prefs.get("monitor_refresh_rate", 1.0)
+
+    # Track startup status for models in this group
+    startup_status = {}
+    model_names_in_group = {m.name for m in models_in_group}
+    startup_complete = threading.Event()
+
+    def check_startup_completion():
+        """Background thread to check startup completion and register models."""
+        models_to_register = []
+
+        while not startup_complete.is_set():
+            all_ready = True
+
+            for model_config in models_in_group:
+                model_name = model_config.name
+
+                # Skip if already processed
+                if model_name in startup_status and startup_status[model_name] in [
+                    "ready",
+                    "failed",
+                ]:
+                    continue
+
+                # Check if server exists
+                if model_name not in proxy_manager.vllm_servers:
+                    startup_status[model_name] = "pending"
+                    all_ready = False
+                    continue
+
+                server = proxy_manager.vllm_servers[model_name]
+
+                # Check if server is running
+                if not server.is_running():
+                    startup_status[model_name] = "failed"
+                    logger.error(f"Server {model_name} failed to start")
+                    continue
+
+                # Check logs for startup completion
+                recent_logs = server.get_recent_logs(20)
+                if recent_logs:
+                    for log in recent_logs:
+                        if "application startup complete" in log.lower():
+                            if model_name not in models_to_register:
+                                startup_status[model_name] = "ready"
+                                models_to_register.append(model_config)
+                                logger.info(f"Model {model_name} is ready")
+                            break
+                    else:
+                        startup_status[model_name] = "starting"
+                        all_ready = False
+                else:
+                    startup_status[model_name] = "starting"
+                    all_ready = False
+
+            # Register ready models with proxy
+            for model_config in models_to_register[:]:
+                if proxy_manager.wait_and_register_model(model_config):
+                    models_to_register.remove(model_config)
+
+            if all_ready:
+                startup_complete.set()
+                break
+
+            time.sleep(1)
+
+    # Start background thread
+    check_thread = Thread(target=check_startup_completion, daemon=True)
+    check_thread.start()
+
+    # Get GPU info for layout
+    gpu_info = get_gpu_info()
+    gpu_panel_size = calculate_gpu_panel_size(len(gpu_info) if gpu_info else 0)
+
+    # Create layout
+    layout = Layout()
+    layout.split_column(
+        Layout(name="header", size=3),
+        Layout(name="status", size=4),
+        Layout(name="gpu", size=gpu_panel_size),
+        Layout(name="divider", size=1),
+        Layout(name="models"),
+        Layout(name="footer", size=1),
+    )
+
+    # Header
+    layout["header"].update(
+        create_panel(
+            f"[bold cyan]{priority_label} - Group {group_index}/{total_groups}[/bold cyan]",
+            title="Sequential Model Loading",
+            border_style="cyan",
+        )
+    )
+
+    # Initial GPU panel
+    layout["gpu"].update(create_gpu_status_panel())
+
+    # Divider
+    layout["divider"].update(Rule("Model Logs", style="cyan"))
+
+    # Footer
+    layout["footer"].update(
+        Align.center(Text("Press Ctrl+C to cancel", style="dim yellow"))
+    )
+
+    # Track if we've shown the final state
+    final_state_shown = False
+
+    try:
+        with Live(layout, console=console, refresh_per_second=monitor_refresh_rate):
+            while not startup_complete.is_set() or not final_state_shown:
+                # Recalculate terminal height
+                current_height = console.height
+                fixed_height = 9 + gpu_panel_size
+                available_log_height = max(20, current_height - fixed_height - 2)
+
+                # Update status
+                status_table = Table(show_header=False, box=None)
+                status_table.add_column("Model", style="cyan")
+                status_table.add_column("Status", style="green")
+
+                ready_count = sum(1 for s in startup_status.values() if s == "ready")
+                total_count = len(models_in_group)
+
+                status_table.add_row(
+                    "Progress", f"{ready_count}/{total_count} models ready"
+                )
+
+                layout["status"].update(
+                    create_panel(
+                        status_table,
+                        title="Status",
+                        border_style=(
+                            "green" if ready_count == total_count else "yellow"
+                        ),
+                    )
+                )
+
+                # Update GPU panel
+                layout["gpu"].update(create_gpu_status_panel())
+
+                # Create models log panel (only show models in this group)
+                models_content = create_models_log_panel(
+                    proxy_manager,
+                    startup_status=startup_status,
+                    available_height=available_log_height,
+                    show_status=True,
+                    filter_models=model_names_in_group,  # Filter to group
+                )
+
+                # Update models panel
+                if models_content:
+                    layout["models"].update(Padding(Group(*models_content), (1, 2)))
+                else:
+                    layout["models"].update(
+                        Padding(Text("[dim]No models starting...[/dim]"), (1, 2))
+                    )
+
+                # Check if all models are ready
+                if startup_complete.is_set() and not final_state_shown:
+                    final_state_shown = True
+                    time.sleep(1.0)
+                elif not startup_complete.is_set():
+                    time.sleep(0.5)
+
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Startup cancelled by user.[/yellow]")
+        startup_complete.set()
+        return False
+
+    # Wait for check thread
+    check_thread.join(timeout=1)
+
+    # Final status
+    success_count = sum(1 for s in startup_status.values() if s == "ready")
+    fail_count = sum(1 for s in startup_status.values() if s == "failed")
+
+    # Get list of failed models
+    failed_models = [
+        name for name, status in startup_status.items() if status == "failed"
+    ]
+
+    if fail_count > 0:
+        console.print(
+            f"\n[red]✗ {fail_count} model(s) in {priority_label} failed to start[/red]"
+        )
+        if failed_models:
+            handle_failed_models(proxy_manager, failed_models)
+        return False
+    else:
+        console.print(
+            f"\n[green]✓ All {success_count} model(s) in {priority_label} started successfully[/green]"
         )
         return True
 

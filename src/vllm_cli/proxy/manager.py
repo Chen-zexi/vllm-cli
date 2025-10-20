@@ -548,6 +548,94 @@ class ProxyManager:
 
         return started_count
 
+    def start_models_with_priorities(self):
+        """
+        Start models sequentially based on loading_priority.
+
+        Models are grouped by priority (lower numbers first). Models within
+        the same priority group start in parallel. This is a generator that
+        yields each priority group after starting its models, allowing the
+        UI layer to monitor startup progress with live feedback.
+
+        This is useful for GPU-shared deployments where models with low
+        gpu-memory-utilization should load first to claim KV cache space.
+
+        Yields:
+            Dictionary for each priority group:
+            - priority: Priority number (or float('inf') for None)
+            - priority_label: Human-readable priority label
+            - models: List of ModelConfig instances in this group
+            - started_models: List of ModelConfig instances that started successfully
+            - failed_models: List of model names that failed to start
+            - group_index: Current group number (1-indexed)
+            - total_groups: Total number of priority groups
+            - total_models: Total number of models across all groups
+        """
+        from collections import defaultdict
+
+        # Group models by loading_priority
+        priority_groups = defaultdict(list)
+        for model_config in self.proxy_config.models:
+            if model_config.enabled:
+                priority = model_config.loading_priority
+                # Use a large number for None priority (load last)
+                effective_priority = priority if priority is not None else float("inf")
+                priority_groups[effective_priority].append(model_config)
+
+        # Sort priority groups (ascending order)
+        sorted_priorities = sorted(priority_groups.keys())
+
+        total_models = sum(len(models) for models in priority_groups.values())
+
+        logger.info(
+            f"Starting {total_models} models in {len(sorted_priorities)} "
+            f"priority group(s)"
+        )
+
+        # Process each priority group sequentially
+        for priority_idx, priority in enumerate(sorted_priorities, 1):
+            models = priority_groups[priority]
+            priority_label = (
+                f"Priority {int(priority)}"
+                if priority != float("inf")
+                else "No Priority (Parallel)"
+            )
+
+            logger.info(
+                f"Starting priority group {priority_idx}/{len(sorted_priorities)}: "
+                f"{priority_label} ({len(models)} model(s))"
+            )
+
+            # Start all models in this priority group (non-blocking)
+            group_started = []
+            group_failed = []
+
+            for model_config in models:
+                if self.start_model(model_config):
+                    group_started.append(model_config)
+                    logger.info(
+                        f"Started {model_config.name} (port {model_config.port})"
+                    )
+                    # Small delay to avoid resource conflicts
+                    time.sleep(0.5)
+                else:
+                    group_failed.append(model_config.name)
+                    logger.error(f"Failed to start {model_config.name}")
+
+            # Yield this group for UI monitoring (non-blocking)
+            yield {
+                "priority": priority,
+                "priority_label": priority_label,
+                "models": models,
+                "started_models": group_started,
+                "failed_models": group_failed,
+                "group_index": priority_idx,
+                "total_groups": len(sorted_priorities),
+                "total_models": total_models,
+            }
+
+            # Control returns here after UI finishes monitoring this group
+
     def _build_vllm_config(self, model_config: ModelConfig) -> Dict[str, Any]:
         """
         Build vLLM server configuration from model configuration.

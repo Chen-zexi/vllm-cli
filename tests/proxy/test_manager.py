@@ -376,3 +376,182 @@ class TestProxyManager:
         assert config["port"] == 8001
         assert config["device"] == "0,1"
         assert config.get("tensor_parallel_size") == 2
+
+    @patch("vllm_cli.proxy.manager.VLLMServer")
+    def test_start_models_with_priorities_sequential(self, mock_server_class, manager):
+        """Test sequential loading with different priorities."""
+        # Setup models with different priorities
+        manager.proxy_config.models[0].loading_priority = 1
+        manager.proxy_config.models[0].enabled = True
+        manager.proxy_config.models[1].loading_priority = 2
+        manager.proxy_config.models[1].enabled = True
+
+        # Create mock servers
+        mock_server1 = MagicMock()
+        mock_server1.start.return_value = True
+        mock_server1.is_running.return_value = True
+        mock_server1.port = 8001
+
+        mock_server2 = MagicMock()
+        mock_server2.start.return_value = True
+        mock_server2.is_running.return_value = True
+        mock_server2.port = 8002
+
+        mock_server_class.side_effect = [mock_server1, mock_server2]
+
+        # Consume the generator
+        with patch("time.sleep"):
+            groups = list(manager.start_models_with_priorities())
+
+        # Verify we got 2 priority groups
+        assert len(groups) == 2
+
+        # Verify first group (priority 1)
+        assert groups[0]["priority"] == 1
+        assert groups[0]["group_index"] == 1
+        assert groups[0]["total_groups"] == 2
+        assert len(groups[0]["started_models"]) == 1
+        assert groups[0]["failed_models"] == []
+
+        # Verify second group (priority 2)
+        assert groups[1]["priority"] == 2
+        assert groups[1]["group_index"] == 2
+        assert groups[1]["total_groups"] == 2
+        assert len(groups[1]["started_models"]) == 1
+        assert groups[1]["failed_models"] == []
+
+    @patch("vllm_cli.proxy.manager.VLLMServer")
+    def test_start_models_with_priorities_parallel_same_priority(
+        self, mock_server_class, manager
+    ):
+        """Test that models with same priority load in parallel."""
+        # Setup models with same priority
+        manager.proxy_config.models[0].loading_priority = 1
+        manager.proxy_config.models[0].enabled = True
+        manager.proxy_config.models[1].loading_priority = 1
+        manager.proxy_config.models[1].enabled = True
+
+        # Create mock servers
+        mock_server = MagicMock()
+        mock_server.start.return_value = True
+        mock_server_class.return_value = mock_server
+
+        # Consume the generator
+        with patch("time.sleep"):
+            groups = list(manager.start_models_with_priorities())
+
+        # Verify both models in same priority group
+        assert len(groups) == 1  # Only one group
+        assert groups[0]["priority"] == 1
+        assert len(groups[0]["started_models"]) == 2  # Both models in same group
+
+    @patch("vllm_cli.proxy.manager.VLLMServer")
+    def test_start_models_with_priorities_none_priority_last(
+        self, mock_server_class, manager
+    ):
+        """Test that models with None priority load after prioritized models."""
+        # Setup models with mixed priorities
+        manager.proxy_config.models[0].loading_priority = 1
+        manager.proxy_config.models[0].enabled = True
+        manager.proxy_config.models[1].loading_priority = None
+        manager.proxy_config.models[1].enabled = True
+
+        # Create mock servers
+        mock_server = MagicMock()
+        mock_server.start.return_value = True
+        mock_server_class.return_value = mock_server
+
+        # Consume the generator
+        with patch("time.sleep"):
+            groups = list(manager.start_models_with_priorities())
+
+        # Verify both models started in different groups
+        assert len(groups) == 2
+        # First group should be priority 1
+        assert groups[0]["priority"] == 1
+        # Second group should be None priority (float('inf'))
+        assert groups[1]["priority"] == float("inf")
+
+    @patch("vllm_cli.proxy.manager.VLLMServer")
+    def test_start_models_with_priorities_start_failure(
+        self, mock_server_class, manager
+    ):
+        """Test handling of model start failure."""
+        # Setup models with priorities
+        manager.proxy_config.models[0].loading_priority = 1
+        manager.proxy_config.models[0].enabled = True
+        manager.proxy_config.models[0].name = "failing-model"
+        manager.proxy_config.models[1].loading_priority = 2
+        manager.proxy_config.models[1].enabled = True
+
+        # First model fails to start, second succeeds
+        mock_server1 = MagicMock()
+        mock_server1.start.return_value = False
+
+        mock_server2 = MagicMock()
+        mock_server2.start.return_value = True
+
+        mock_server_class.side_effect = [mock_server1, mock_server2]
+
+        # Consume the generator
+        with patch("time.sleep"):
+            groups = list(manager.start_models_with_priorities())
+
+        # Verify first group has failure
+        assert len(groups[0]["started_models"]) == 0
+        assert "failing-model" in groups[0]["failed_models"]
+
+        # Verify second group succeeded
+        assert len(groups[1]["started_models"]) == 1
+        assert len(groups[1]["failed_models"]) == 0
+
+    @patch("vllm_cli.proxy.manager.VLLMServer")
+    def test_start_models_with_priorities_registration_failure(
+        self, mock_server_class, manager
+    ):
+        """Test handling of model registration failure."""
+        # Setup models
+        manager.proxy_config.models[0].loading_priority = 1
+        manager.proxy_config.models[0].enabled = True
+        manager.proxy_config.models[0].name = "registration-fail"
+        # Disable second model to simplify test
+        manager.proxy_config.models[1].enabled = False
+
+        # Model starts successfully
+        mock_server = MagicMock()
+        mock_server.start.return_value = True
+        mock_server_class.return_value = mock_server
+
+        # Consume the generator
+        with patch("time.sleep"):
+            groups = list(manager.start_models_with_priorities())
+
+        # Verify model started (registration happens in monitoring layer, not here)
+        assert len(groups) == 1
+        assert len(groups[0]["started_models"]) == 1
+        assert groups[0]["started_models"][0].name == "registration-fail"
+
+    @patch("vllm_cli.proxy.manager.VLLMServer")
+    def test_start_models_with_priorities_skip_disabled(
+        self, mock_server_class, manager
+    ):
+        """Test that disabled models are skipped."""
+        # Setup one enabled, one disabled
+        manager.proxy_config.models[0].loading_priority = 1
+        manager.proxy_config.models[0].enabled = True
+        manager.proxy_config.models[1].loading_priority = 2
+        manager.proxy_config.models[1].enabled = False
+
+        # Create mock server
+        mock_server = MagicMock()
+        mock_server.start.return_value = True
+        mock_server_class.return_value = mock_server
+
+        # Consume the generator
+        with patch("time.sleep"):
+            groups = list(manager.start_models_with_priorities())
+
+        # Verify only one group (disabled model skipped)
+        assert len(groups) == 1
+        assert len(groups[0]["started_models"]) == 1
+        assert mock_server_class.call_count == 1

@@ -86,6 +86,7 @@ class ProxyConfigManager:
                         "profile": model.profile,
                         "config_overrides": model.config_overrides,
                         "enabled": model.enabled,
+                        "loading_priority": model.loading_priority,
                     }
                     for model in config.models
                 ],

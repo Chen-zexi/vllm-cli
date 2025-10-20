@@ -18,6 +18,7 @@ from .control import configure_model_for_proxy, configure_proxy_interactively
 from .monitor import (
     monitor_individual_model_by_name,
     monitor_model_logs_menu,
+    monitor_priority_group,
     monitor_proxy_logs,
     monitor_startup_progress,
     refresh_model_registry,
@@ -613,22 +614,99 @@ def handle_multi_model_proxy() -> str:
                 # Start the proxy
                 proxy_manager = ProxyManager(proxy_config)
 
-                # Start model servers without waiting, show logs immediately
-                console.print("\n[cyan]Launching model servers...[/cyan]")
-                launched = proxy_manager.start_all_models_no_wait()
+                # Check if any models have loading priorities
+                has_priorities = any(
+                    m.loading_priority is not None
+                    for m in proxy_config.models
+                    if m.enabled
+                )
 
-                if launched > 0:
-                    # Monitor startup progress with live logs
-                    all_started = monitor_startup_progress(proxy_manager)
+                if has_priorities:
+                    # Use sequential loading with priorities
+                    console.print(
+                        "\n[cyan]Starting models with sequential loading...[/cyan]"
+                    )
+                    console.print(
+                        "[dim]Models will load in priority order to ensure "
+                        "proper GPU memory allocation[/dim]\n"
+                    )
 
-                    if not all_started:
-                        console.print("[yellow]Some models failed to start.[/yellow]")
+                    # Track results across all groups
+                    total_started = 0
+                    total_failed = []
+
+                    # Iterate through priority groups
+                    for group_info in proxy_manager.start_models_with_priorities():
+                        # Monitor this priority group with live display
+                        success = monitor_priority_group(
+                            proxy_manager,
+                            group_info["started_models"],
+                            group_info["priority_label"],
+                            group_info["group_index"],
+                            group_info["total_groups"],
+                        )
+
+                        # Track results
+                        total_started += len(group_info["started_models"])
+                        total_failed.extend(group_info["failed_models"])
+
+                        # Stop if this group failed
+                        if not success:
+                            console.print(
+                                f"\n[red]Priority group {group_info['priority_label']} failed to start[/red]"
+                            )
+                            if not inquirer.confirm(
+                                "Continue with remaining groups?", default=False
+                            ):
+                                console.print(
+                                    "[yellow]Stopping all servers...[/yellow]"
+                                )
+                                proxy_manager.stop_proxy()
+                                return "continue"
+
+                    # Check overall results
+                    if total_failed:
+                        console.print(
+                            f"\n[yellow]Warning: {len(total_failed)} model(s) failed to start:[/yellow]"
+                        )
+                        for model_name in total_failed:
+                            console.print(f"  • {model_name}")
+
+                        if total_started == 0:
+                            console.print(
+                                "[red]No models started successfully. Cannot start proxy.[/red]"
+                            )
+                            input("\nPress Enter to continue...")
+                            return "continue"
+
                         if not inquirer.confirm(
-                            "Continue with available models?", default=False
+                            f"Continue with {total_started} available model(s)?",
+                            default=False,
                         ):
                             console.print("[yellow]Stopping all servers...[/yellow]")
                             proxy_manager.stop_proxy()
                             return "continue"
+                else:
+                    # Use parallel loading (original behavior)
+                    console.print("\n[cyan]Launching model servers...[/cyan]")
+                    launched = proxy_manager.start_all_models_no_wait()
+
+                    if launched > 0:
+                        # Monitor startup progress with live logs
+                        all_started = monitor_startup_progress(proxy_manager)
+
+                        if not all_started:
+                            console.print(
+                                "[yellow]Some models failed to start.[/yellow]"
+                            )
+                            if not inquirer.confirm(
+                                "Continue with available models?", default=False
+                            ):
+                                console.print(
+                                    "[yellow]Stopping all servers...[/yellow]"
+                                )
+                                proxy_manager.stop_proxy()
+                                return "continue"
 
                 if proxy_manager.start_proxy():
                     console.print(
@@ -692,22 +770,91 @@ def handle_multi_model_proxy() -> str:
             # Start proxy
             proxy_manager = ProxyManager(proxy_config)
 
-            # Start model servers without waiting, show logs immediately
-            console.print("\n[cyan]Launching model servers...[/cyan]")
-            launched = proxy_manager.start_all_models_no_wait()
+            # Check if any models have loading priorities
+            has_priorities = any(
+                m.loading_priority is not None for m in proxy_config.models if m.enabled
+            )
 
-            if launched > 0:
-                # Monitor startup progress with live logs
-                all_started = monitor_startup_progress(proxy_manager)
+            if has_priorities:
+                # Use sequential loading with priorities
+                console.print(
+                    "\n[cyan]Starting models with sequential loading...[/cyan]"
+                )
+                console.print(
+                    "[dim]Models will load in priority order to ensure "
+                    "proper GPU memory allocation[/dim]\n"
+                )
 
-                if not all_started:
-                    console.print("[yellow]Some models failed to start.[/yellow]")
+                # Track results across all groups
+                total_started = 0
+                total_failed = []
+
+                # Iterate through priority groups
+                for group_info in proxy_manager.start_models_with_priorities():
+                    # Monitor this priority group with live display
+                    success = monitor_priority_group(
+                        proxy_manager,
+                        group_info["started_models"],
+                        group_info["priority_label"],
+                        group_info["group_index"],
+                        group_info["total_groups"],
+                    )
+
+                    # Track results
+                    total_started += len(group_info["started_models"])
+                    total_failed.extend(group_info["failed_models"])
+
+                    # Stop if this group failed
+                    if not success:
+                        console.print(
+                            f"\n[red]Priority group {group_info['priority_label']} failed to start[/red]"
+                        )
+                        if not inquirer.confirm(
+                            "Continue with remaining groups?", default=False
+                        ):
+                            console.print("[yellow]Stopping all servers...[/yellow]")
+                            proxy_manager.stop_proxy()
+                            return "continue"
+
+                # Check overall results
+                if total_failed:
+                    console.print(
+                        f"\n[yellow]Warning: {len(total_failed)} model(s) failed to start:[/yellow]"
+                    )
+                    for model_name in total_failed:
+                        console.print(f"  • {model_name}")
+
+                    if total_started == 0:
+                        console.print(
+                            "[red]No models started successfully. Cannot start proxy.[/red]"
+                        )
+                        input("\nPress Enter to continue...")
+                        return "continue"
+
                     if not inquirer.confirm(
-                        "Continue with available models?", default=False
+                        f"Continue with {total_started} available model(s)?",
+                        default=False,
                     ):
                         console.print("[yellow]Stopping all servers...[/yellow]")
                         proxy_manager.stop_proxy()
                         return "continue"
+            else:
+                # Use parallel loading (original behavior)
+                console.print("\n[cyan]Launching model servers...[/cyan]")
+                launched = proxy_manager.start_all_models_no_wait()
+
+                if launched > 0:
+                    # Monitor startup progress with live logs
+                    all_started = monitor_startup_progress(proxy_manager)
+
+                    if not all_started:
+                        console.print("[yellow]Some models failed to start.[/yellow]")
+                        if not inquirer.confirm(
+                            "Continue with available models?", default=False
+                        ):
+                            console.print("[yellow]Stopping all servers...[/yellow]")
+                            proxy_manager.stop_proxy()
+                            return "continue"
 
             if proxy_manager.start_proxy():
                 console.print(
