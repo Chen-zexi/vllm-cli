@@ -295,6 +295,29 @@ class TestProxyServer:
 
             assert response is not None
 
+    def test_responses_endpoint(self, test_client, proxy_server):
+        """Test responses endpoint routing (OpenAI Responses API)."""
+        # Add backend
+        proxy_server.router.add_backend(
+            "reasoning-model", "http://localhost:8001", {"port": 8001}
+        )
+
+        with patch.object(
+            proxy_server, "_forward_request", new_callable=AsyncMock
+        ) as mock_forward:
+            mock_forward.return_value = MagicMock(status_code=200)
+
+            response = test_client.post(
+                "/v1/responses",
+                json={
+                    "model": "reasoning-model",
+                    "instructions": "You are a helpful assistant",
+                    "input": [{"role": "user", "content": "What is 2+2?"}],
+                },
+            )
+
+            assert response is not None
+
 
 class TestModelRegistry:
     """Test ModelRegistry functionality."""

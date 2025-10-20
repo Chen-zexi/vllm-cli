@@ -116,6 +116,11 @@ class ProxyServer:
             """Handle embeddings requests."""
             return await self._forward_request(request, "/v1/embeddings")
 
+        @self.app.post("/v1/responses")
+        async def responses(request: Request):
+            """Handle responses requests (OpenAI Responses API)."""
+            return await self._forward_request(request, "/v1/responses")
+
         @self.app.get("/proxy/status")
         async def proxy_status():
             """Get proxy server status."""
