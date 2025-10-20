@@ -348,7 +348,10 @@ def edit_specific_profile(profile_name: str) -> None:
     Edit a specific profile directly.
     Helper function for quick editing from view details.
     """
-    from .custom_config import configure_environment_variables
+    from .custom_config import (
+        configure_advanced_hierarchical,
+        configure_environment_variables,
+    )
 
     config_manager = ConfigManager()
 
@@ -379,9 +382,9 @@ def edit_specific_profile(profile_name: str) -> None:
 
     # Offer edit options
     edit_options = [
-        "Edit configuration values",
+        "Modify existing values only",
+        "Full configuration (add/remove/modify)",
         "Edit environment variables",
-        "Edit both",
         "Cancel",
     ]
 
@@ -392,52 +395,70 @@ def edit_specific_profile(profile_name: str) -> None:
     if edit_choice == "Cancel" or not edit_choice:
         return
 
-    # Edit configuration values
-    if edit_choice in ["Edit configuration values", "Edit both"]:
-        console.print("\n[bold]Current configuration:[/bold]")
-        display_config(config)
+    # Modify existing values only
+    if edit_choice == "Modify existing values only":
+        if not config:
+            console.print("\n[yellow]No configuration values to modify.[/yellow]")
+            console.print(
+                "[dim]Use 'Full configuration' option to add arguments first.[/dim]"
+            )
+            input("\nPress Enter to continue...")
+        else:
+            console.print("\n[bold]Current configuration:[/bold]")
+            display_config(config)
 
-        console.print("\nEnter new values (press Enter to keep current):")
+            console.print("\nEnter new values (press Enter to keep current):")
+            console.print(
+                "[dim]For type-aware editing, use 'Full configuration' option[/dim]\n"
+            )
 
-        # Create a list of keys to iterate over (to avoid dictionary modification during iteration)
-        config_keys = list(config.keys())
-        keys_to_delete = []
+            for key in list(config.keys()):
+                current_value = config[key]
 
-        for key in config_keys:
-            current_value = config[key]
-            if key == "max_model_len":
-                new_value = input(
-                    f"{key} [{current_value}] (leave empty to remove limit): "
-                ).strip()
-                if new_value == "":
-                    # Mark for deletion after iteration
-                    keys_to_delete.append(key)
-                elif new_value:
-                    config[key] = int(new_value)
-            else:
-                new_value = input(f"{key} [{current_value}]: ").strip()
-                if new_value:
-                    # Convert to appropriate type
-                    if key in ["tensor_parallel_size"]:
-                        config[key] = int(new_value)
-                    elif key == "gpu_memory_utilization":
-                        config[key] = float(new_value)
-                    elif key in [
-                        "trust_remote_code",
-                        "enable_chunked_prefill",
-                        "enable_expert_parallel",
-                        "enable_prefix_caching",
-                    ]:
-                        config[key] = new_value.lower() in ["true", "yes", "1"]
-                    else:
+                # Simple value editing - try to preserve type
+                if isinstance(current_value, bool):
+                    new_value = (
+                        input(f"{key} [{current_value}] (true/false): ").strip().lower()
+                    )
+                    if new_value:
+                        config[key] = new_value in ["true", "yes", "1", "y"]
+                elif isinstance(current_value, int):
+                    new_value = input(f"{key} [{current_value}]: ").strip()
+                    if new_value:
+                        try:
+                            config[key] = int(new_value)
+                        except ValueError:
+                            console.print(
+                                f"[red]Invalid integer value for {key}, keeping current value[/red]"
+                            )
+                elif isinstance(current_value, float):
+                    new_value = input(f"{key} [{current_value}]: ").strip()
+                    if new_value:
+                        try:
+                            config[key] = float(new_value)
+                        except ValueError:
+                            console.print(
+                                f"[red]Invalid number value for {key}, keeping current value[/red]"
+                            )
+                else:  # string or other types
+                    new_value = input(f"{key} [{current_value}]: ").strip()
+                    if new_value:
                         config[key] = new_value
 
-        # Delete keys marked for deletion
-        for key in keys_to_delete:
-            del config[key]
+    # Full configuration (add/remove/modify)
+    elif edit_choice == "Full configuration (add/remove/modify)":
+        console.print("\n[bold]Full Configuration Mode[/bold]")
+        console.print(
+            "[dim]Navigate categories to add, modify, or remove arguments[/dim]"
+        )
+
+        # Use the existing hierarchical configuration system
+        config = configure_advanced_hierarchical(config, config_manager)
+
+        console.print("\n[green]Configuration updated[/green]")
 
     # Edit environment variables
-    if edit_choice in ["Edit environment variables", "Edit both"]:
+    elif edit_choice == "Edit environment variables":
         console.print("\n[bold]Environment Variables:[/bold]")
         if environment:
             for key, value in environment.items():

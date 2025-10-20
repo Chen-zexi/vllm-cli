@@ -33,16 +33,19 @@ def display_configured_models(models: List[ModelConfig]):
     table.add_column("Port", style="magenta")
     table.add_column("GPU(s)", style="yellow")
     table.add_column("Profile", style="blue")
+    table.add_column("Priority", style="green", width=8)
 
     for idx, model in enumerate(models, 1):
         gpu_str = ",".join(str(g) for g in model.gpu_ids) if model.gpu_ids else "Auto"
         profile_str = model.profile or "None"
+        priority_str = str(model.loading_priority) if model.loading_priority else "-"
         table.add_row(
             str(idx),
             model.name[:30] + "..." if len(model.name) > 30 else model.name,
             str(model.port),
             gpu_str,
             profile_str,
+            priority_str,
         )
 
     console.print("\n")
@@ -467,6 +470,41 @@ def configure_model_for_proxy(
         config_manager = ConfigManager()
         _check_parallel_settings_conflict(profile, gpu_ids, config_manager)
 
+    # Loading priority (optional)
+    loading_priority = None
+    if len(existing_models) > 0 or not is_running_proxy:
+        # Only ask about loading priority when configuring multiple models
+        console.print("\n[bold]Loading Priority (Optional)[/bold]")
+        console.print(
+            "[dim]Set loading order for sequential startup. "
+            "Lower numbers load first (e.g., 1, 2, 3).[/dim]"
+        )
+        console.print(
+            "[dim]Useful when models share GPUs to control KV cache allocation.[/dim]"
+        )
+        console.print(
+            "[dim]Leave empty for parallel loading or if this is the only model.[/dim]"
+        )
+
+        priority_input = input("Loading priority (press Enter to skip): ").strip()
+        if priority_input:
+            try:
+                loading_priority = int(priority_input)
+                if loading_priority < 1:
+                    console.print(
+                        "[yellow]Priority must be >= 1, using default (no priority)[/yellow]"
+                    )
+                    loading_priority = None
+                else:
+                    console.print(
+                        f"[green]✓ Loading priority set to {loading_priority}[/green]"
+                    )
+            except ValueError:
+                console.print(
+                    "[yellow]Invalid priority number, using default (no priority)[/yellow]"
+                )
+                loading_priority = None
+
     # Create model configuration
     config = ModelConfig(
         name=model_name,
@@ -476,6 +514,7 @@ def configure_model_for_proxy(
         profile=profile,
         enabled=True,
         config_overrides=model_config_overrides,
+        loading_priority=loading_priority,
     )
 
     # Add alias to config_overrides if provided
@@ -661,6 +700,7 @@ def display_proxy_config(config: ProxyConfig):
         table.add_column("GPUs", style="magenta")
         table.add_column("Port", style="yellow")
         table.add_column("Profile", style="blue")
+        table.add_column("Priority", style="green", width=8)
         table.add_column("Status", style="dim")
 
         for model in config.models:
@@ -668,6 +708,9 @@ def display_proxy_config(config: ProxyConfig):
                 ",".join(str(g) for g in model.gpu_ids) if model.gpu_ids else "Auto"
             )
             status = "Enabled" if model.enabled else "Disabled"
+            priority_str = (
+                str(model.loading_priority) if model.loading_priority else "-"
+            )
             table.add_row(
                 model.name,
                 (
@@ -678,6 +721,7 @@ def display_proxy_config(config: ProxyConfig):
                 gpu_str,
                 str(model.port),
                 model.profile or "None",
+                priority_str,
                 status,
             )
 

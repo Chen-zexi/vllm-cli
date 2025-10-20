@@ -610,6 +610,15 @@
       "default": null,
       "cli_flag": "--log-config-file",
       "importance": "medium"
+    },
+    "async_scheduling": {
+      "type": "boolean",
+      "category": "performance",
+      "description": "EXPERIMENTAL: Perform async scheduling to reduce CPU overhead",
+      "default": false,
+      "cli_flag": "--async-scheduling",
+      "importance": "medium",
+      "hint": "May help reduce CPU overheads but not supported with all features"
     }
   }
 }

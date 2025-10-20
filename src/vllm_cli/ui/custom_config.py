@@ -158,13 +158,9 @@ def configure_advanced_hierarchical(
     Returns:
         Updated configuration
     """
-    # Get non-default categories (including parallelism now)
+    # Get all categories for complete configuration
     categories = config_manager.get_ordered_categories()
-    advanced_categories = [
-        (cat_id, cat_info)
-        for cat_id, cat_info in categories
-        if not cat_info.get("show_by_default", False)
-    ]
+    advanced_categories = categories  # Include all categories
 
     while True:
         # Build category menu
@@ -837,6 +833,8 @@ def configure_environment_variables(
             "VLLM_USE_TRITON_FLASH_ATTN": "Enable Triton flash attention (usually 1)",
             "VLLM_ATTENTION_BACKEND": "Attention backend (e.g., TRITON_ATTN_VLLM_V1 for A100)",
             "VLLM_USE_TRTLLM_ATTENTION": "TensorRT-LLM attention for Blackwell GPUs (usually 1)",
+            "VLLM_USE_TRTLLM_DECODE_ATTENTION": "Use TensorRT-LLM for decode attention (usually 1)",
+            "VLLM_USE_TRTLLM_CONTEXT_ATTENTION": "Use TensorRT-LLM for context attention (usually 1)",
             "VLLM_FLASHINFER_FORCE_TENSOR_CORES": "Force tensor core usage (usually 1)",
         },
         "MoE Model Optimization": {
