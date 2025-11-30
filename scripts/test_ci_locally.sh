@@ -51,8 +51,10 @@ fi
 run_test "Unit Tests" "pytest tests/ -v --tb=short"
 
 # 4. Check Test Coverage (optional but informative)
-if command -v pytest-cov &> /dev/null; then
+if python -c "import pytest_cov" 2>/dev/null; then
     run_test "Test Coverage" "pytest tests/ --cov=src/vllm_cli --cov-report=term-missing --cov-fail-under=50"
+else
+    echo -e "${YELLOW}⚠️  Skipping coverage (pytest-cov not installed)${NC}\n"
 fi
 
 # 5. Linting with flake8
@@ -90,7 +92,16 @@ run_test "CLI Help Test" "python -m vllm_cli --help > /dev/null"
 
 # 12. Validate pyproject.toml
 if [ -f "pyproject.toml" ]; then
-    run_test "Validate pyproject.toml" "python -c 'import toml; toml.load(\"pyproject.toml\"); print(\"pyproject.toml is valid\")'"
+    run_test "Validate pyproject.toml" "python -c '
+try:
+    import tomllib
+    with open(\"pyproject.toml\", \"rb\") as f:
+        tomllib.load(f)
+except ImportError:
+    import toml
+    toml.load(\"pyproject.toml\")
+print(\"pyproject.toml is valid\")
+'"
 fi
 
 # Summary
