@@ -5,7 +5,7 @@ Seven carefully designed profiles cover most common use cases and hardware confi
 ## General Purpose Profiles
 
 ### `standard` - Minimal configuration with smart defaults
-Uses vLLM's defaults configuration. Perfect for most models and hardware setups.
+Uses vLLM's default configuration. Perfect for most models and hardware setups.
 
 **Use Case:** Starting point for any model, general inference tasks
 **Configuration:** No additional arguments - uses vLLM defaults
@@ -182,7 +182,7 @@ Common environment variables used in profiles:
 
 | Variable | Purpose | Values |
 |----------|---------|---------|
-| `VLLM_ATTENTION_BACKEND` | Attention computation backend | `FLASH_ATTN`, `XFORMERS`, `TRITON` |
+| `VLLM_ATTENTION_BACKEND` | Attention computation backend | `FLASH_ATTN`, `XFORMERS`, `TRITON_ATTN_VLLM_V1` |
 | `VLLM_USE_TRITON_FLASH_ATTN` | Enable Triton flash attention | `0`, `1` |
 | `VLLM_ENABLE_FUSED_MOE_ACTIVATION_CHUNKING` | MoE activation chunking | `0`, `1` |
 | `VLLM_USE_FLASHINFER_MXFP4_BF16_MOE` | BF16 precision for MoE | `0`, `1` |

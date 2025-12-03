@@ -132,7 +132,7 @@ pipx install --pip-args="--pre" "vllm-cli[vllm]"
 
 ```bash
 # Interactive mode - menu-driven interface
-vllm-cl
+vllm-cli
 # Serve a model
 vllm-cli serve --model openai/gpt-oss-20b
 

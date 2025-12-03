@@ -1,4 +1,4 @@
-.PHONY: help test lint format clean install ci-test all
+.PHONY: help test test-cov lint format format-check type-check clean install ci-test ci-local ci-matrix all pre-commit
 
 # Default target
 help:
