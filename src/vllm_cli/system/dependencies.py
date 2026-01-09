@@ -768,12 +768,14 @@ def get_vllm_platform_info() -> Dict[str, Any]:
 
                 arch_map = {
                     (7, 0): "Volta V100",
+                    (7, 2): "Volta (Jetson Xavier)",
                     (7, 5): "Turing (T4, RTX 20xx)",
                     (8, 0): "Ampere A100",
                     (8, 6): "Ampere (RTX 30xx, A40)",
+                    (8, 7): "Ampere (Jetson Orin)",
                     (8, 9): "Ada Lovelace (RTX 40xx, L40)",
                     (9, 0): "Hopper (H100)",
-                    (10, 0): "Blackwell (B100/B200)",
+                    (10, 0): "Blackwell (B100/B200, Jetson Thor)",
                     (12, 0): "Blackwell (RTX 6000)",
                 }
 

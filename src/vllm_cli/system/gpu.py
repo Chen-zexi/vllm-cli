@@ -4,6 +4,7 @@ GPU information and detection utilities.
 
 Provides functions for detecting and gathering information about
 available GPUs using multiple methods (nvidia-smi, PyTorch fallback).
+Includes support for NVIDIA Jetson platforms (Orin, Thor, Xavier).
 """
 import logging
 import subprocess
@@ -12,9 +13,38 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 
+def _safe_int(value: str, default: int = 0) -> int:
+    """
+    Safely convert a string to int, handling N/A and empty values.
+
+    This is particularly important for Jetson devices where nvidia-smi
+    returns [N/A] for memory and utilization fields.
+
+    Args:
+        value: String value to convert
+        default: Default value if conversion fails
+
+    Returns:
+        Integer value or default
+    """
+    if not value:
+        return default
+    value = value.strip()
+    if value in ("[N/A]", "N/A", "[Not Supported]", ""):
+        return default
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return default
+
+
 def get_gpu_info() -> List[Dict[str, Any]]:
     """
     Get information about available GPUs.
+
+    Supports both discrete NVIDIA GPUs and Jetson integrated GPUs.
+    Falls back to PyTorch detection if nvidia-smi fails or returns
+    incomplete data.
 
     Returns:
         List of GPU information dictionaries
@@ -32,23 +62,31 @@ def get_gpu_info() -> List[Dict[str, Any]]:
             capture_output=True,
             text=True,
             check=True,
+            timeout=10,  # Add timeout for Jetson devices
         )
 
         for line in result.stdout.strip().split("\n"):
             if line:
                 parts = line.split(", ")
-                if len(parts) >= 7:
+                if len(parts) >= 2:  # At least index and name required
+                    # Safely parse each field, handling [N/A] values (common on Jetson)
+                    memory_total = _safe_int(parts[2] if len(parts) > 2 else "0")
+                    memory_used = _safe_int(parts[3] if len(parts) > 3 else "0")
+                    memory_free = _safe_int(parts[4] if len(parts) > 4 else "0")
+
+                    # Calculate memory_free if not provided but total is available
+                    if memory_free == 0 and memory_total > 0 and memory_used >= 0:
+                        memory_free = memory_total - memory_used
+
                     gpus.append(
                         {
-                            "index": int(parts[0]),
-                            "name": parts[1],
-                            "memory_total": int(parts[2])
-                            * 1024
-                            * 1024,  # Convert to bytes
-                            "memory_used": int(parts[3]) * 1024 * 1024,
-                            "memory_free": int(parts[4]) * 1024 * 1024,
-                            "utilization": int(parts[5]) if parts[5] else 0,
-                            "temperature": int(parts[6]) if parts[6] else 0,
+                            "index": _safe_int(parts[0]),
+                            "name": parts[1].strip() if len(parts) > 1 else "Unknown GPU",
+                            "memory_total": memory_total * 1024 * 1024,  # MB to bytes
+                            "memory_used": memory_used * 1024 * 1024,
+                            "memory_free": memory_free * 1024 * 1024,
+                            "utilization": _safe_int(parts[5] if len(parts) > 5 else "0"),
+                            "temperature": _safe_int(parts[6] if len(parts) > 6 else "0"),
                         }
                     )
 
@@ -56,11 +94,16 @@ def get_gpu_info() -> List[Dict[str, Any]]:
         logger.warning("nvidia-smi timed out")
     except (subprocess.CalledProcessError, FileNotFoundError):
         logger.debug("nvidia-smi not available or failed")
-
-        # Try to get info from torch as fallback
-        gpus = _try_pytorch_gpu_detection()
     except Exception as e:
-        logger.warning(f"Unexpected error getting GPU info: {e}")
+        logger.debug(f"nvidia-smi parsing error: {e}")
+
+    # Fallback to PyTorch if nvidia-smi didn't find GPUs or returned incomplete data
+    # This is essential for Jetson devices where nvidia-smi returns [N/A] for memory
+    if not gpus or all(gpu.get("memory_total", 0) == 0 for gpu in gpus):
+        logger.debug("Falling back to PyTorch GPU detection")
+        pytorch_gpus = _try_pytorch_gpu_detection()
+        if pytorch_gpus:
+            gpus = pytorch_gpus
 
     return gpus
 

@@ -208,6 +208,10 @@ def create_no_gpu_warning() -> Text:
     warning_text.append("  • NVIDIA GPU is installed\n", style="dim white")
     warning_text.append("  • NVIDIA drivers are installed\n", style="dim white")
     warning_text.append("  • CUDA toolkit is available\n", style="dim white")
+    warning_text.append("\n", style="white")
+    warning_text.append("For Jetson devices (Orin, Thor, Xavier):\n", style="dim cyan")
+    warning_text.append("  • Ensure JetPack SDK is properly installed\n", style="dim white")
+    warning_text.append("  • Verify PyTorch with CUDA support is available\n", style="dim white")
 
     return warning_text
 

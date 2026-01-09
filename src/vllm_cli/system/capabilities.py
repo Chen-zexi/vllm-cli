@@ -227,6 +227,8 @@ def _determine_gpu_architecture(capability: Tuple[int, int]) -> Dict[str, Any]:
     """
     Determine GPU architecture and supported features from compute capability.
 
+    Includes support for Jetson platforms (Xavier SM 7.2, Orin SM 8.7, Thor SM 10.x).
+
     Args:
         capability: CUDA compute capability tuple (major, minor)
 
@@ -236,14 +238,14 @@ def _determine_gpu_architecture(capability: Tuple[int, int]) -> Dict[str, Any]:
     major, minor = capability
     arch_info = {}
 
-    # Architecture mapping
+    # Architecture mapping (including Jetson devices)
     if major == 12:
         # Blackwell B100/B200 series (sm_120)
         arch_info["architecture"] = "Blackwell"
         arch_info["generation"] = "Latest"
         arch_info["sm_version"] = f"sm_{major}{minor}"
     elif major == 10:
-        # Blackwell consumer/lower-tier (sm_100)
+        # Blackwell consumer/lower-tier (sm_100) or Jetson Thor
         arch_info["architecture"] = "Blackwell"
         arch_info["generation"] = "Latest"
         arch_info["sm_version"] = f"sm_{major}{minor}"
@@ -255,6 +257,12 @@ def _determine_gpu_architecture(capability: Tuple[int, int]) -> Dict[str, Any]:
         arch_info["architecture"] = "Ada Lovelace"
         arch_info["generation"] = "Current"
         arch_info["sm_version"] = f"sm_{major}{minor}"
+    elif major == 8 and minor == 7:
+        # Jetson Orin (AGX, NX, Nano) uses SM 8.7
+        arch_info["architecture"] = "Ampere (Jetson Orin)"
+        arch_info["generation"] = "Current"
+        arch_info["sm_version"] = f"sm_{major}{minor}"
+        arch_info["is_jetson"] = True
     elif major == 8 and minor >= 6:
         arch_info["architecture"] = "Ampere"
         arch_info["generation"] = "Current"
@@ -267,6 +275,12 @@ def _determine_gpu_architecture(capability: Tuple[int, int]) -> Dict[str, Any]:
         arch_info["architecture"] = "Turing"
         arch_info["generation"] = "Previous"
         arch_info["sm_version"] = f"sm_{major}{minor}"
+    elif major == 7 and minor == 2:
+        # Jetson Xavier (AGX, NX) uses SM 7.2
+        arch_info["architecture"] = "Volta (Jetson Xavier)"
+        arch_info["generation"] = "Previous"
+        arch_info["sm_version"] = f"sm_{major}{minor}"
+        arch_info["is_jetson"] = True
     elif major == 7 and minor < 5:
         arch_info["architecture"] = "Volta"
         arch_info["generation"] = "Previous"
